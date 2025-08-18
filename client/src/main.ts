@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { FlightState, FlightInput, step } from './physics/flight';
-import { connect, sendState, sendProjectile, Snapshot, id as clientId } from './net/socket';
+import {
+  connect,
+  sendState,
+  sendProjectile,
+  Snapshot,
+  id as clientId,
+} from './net/socket';
 import { showLanding, AircraftChoice } from './ui/landing';
 import { showLobby } from './ui/lobby';
 import { createAircraft } from './game/spawn';
@@ -10,10 +16,19 @@ import { Controls } from './input/controls';
 import { GameMode, getMode } from './mode/mode';
 import { createPauseMenu } from './ui/pause';
 import { createStatusChip } from './ui/statusChip';
+import { BootOverlay, ensureWebGL, must, tryStep } from './boot/boot';
 
-const canvas = document.getElementById('app') as HTMLCanvasElement;
-const renderer = new THREE.WebGLRenderer({ canvas });
-renderer.setSize(window.innerWidth, window.innerHeight);
+BootOverlay.step('DOM ready');
+const app = must(document.getElementById('app'), '#app not found') as HTMLDivElement;
+let canvas: HTMLCanvasElement;
+let renderer: THREE.WebGLRenderer;
+tryStep('WebGL ok', () => {
+  ensureWebGL();
+  canvas = document.createElement('canvas');
+  renderer = new THREE.WebGLRenderer({ canvas });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  app.appendChild(canvas);
+});
 
 const mode = getMode();
 
@@ -29,8 +44,20 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87ceeb);
   scene.fog = new THREE.Fog(0x87ceeb, 50, 300);
+  BootOverlay.step('Scene created');
 
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    BootOverlay.step('Resized');
+  });
 
   const sun = new THREE.DirectionalLight(0xffffff, 1);
   sun.position.set(10, 20, 10);
@@ -164,8 +191,13 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
   let last = performance.now();
   let acc = 0;
   const FIXED_DT = 1 / 120;
+  let loopLogged = false;
 
   function animate(now: number) {
+    if (!loopLogged) {
+      BootOverlay.step('Loop running');
+      loopLogged = true;
+    }
     const dt = (now - last) / 1000;
     last = now;
     const snap = controls.getInputs();
