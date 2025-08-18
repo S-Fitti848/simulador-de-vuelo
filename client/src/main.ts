@@ -7,12 +7,21 @@ import { createAircraft } from './game/spawn';
 import { createHUD } from './hud/hud';
 import { ChaseCamera } from './cam/chase';
 import { Controls } from './input/controls';
+import { GameMode, getMode } from './mode/mode';
+import { createPauseMenu } from './ui/pause';
+import { createStatusChip } from './ui/statusChip';
 
 const canvas = document.getElementById('app') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-showLanding((result) => showLobby(result, startGame));
+const mode = getMode();
+
+if (mode === GameMode.Multiplayer) {
+  showLanding((result) => showLobby(result, startGame));
+} else {
+  showLanding(startGame);
+}
 
 function startGame(result: { username: string; aircraft: AircraftChoice }) {
   const { username, aircraft } = result;
@@ -38,19 +47,50 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
   scene.add(local);
 
   const state: FlightState = {
-    position: new THREE.Vector3(0, 5, 0),
+    position: new THREE.Vector3(),
     velocity: new THREE.Vector3(),
     orientation: new THREE.Quaternion(),
     angularVelocity: new THREE.Vector3(),
-    throttle: 0,
+    throttle: 0.6,
   };
 
   const input: FlightInput = { pitch: 0, roll: 0, yaw: 0 };
   let hp = 1;
 
+  function resetState() {
+    hp = 1;
+    state.position.set(0, 50, 0);
+    state.velocity.set(0, 0, -30);
+    state.orientation.set(0, 0, 0, 1);
+    state.throttle = 0.6;
+  }
+  resetState();
+
   const hud = createHUD();
   const chase = new ChaseCamera(camera, local);
   const controls = new Controls(canvas);
+  const _status = createStatusChip(mode);
+  let paused = false;
+  const pauseMenu = createPauseMenu(
+    mode,
+    () => {
+      paused = false;
+    },
+    () => {
+      resetState();
+      paused = false;
+    }
+  );
+  const debugEl = document.createElement('div');
+  debugEl.style.position = 'absolute';
+  debugEl.style.bottom = '10px';
+  debugEl.style.left = '10px';
+  debugEl.style.color = 'yellow';
+  debugEl.style.fontFamily = 'monospace';
+  debugEl.style.whiteSpace = 'pre';
+  debugEl.style.display = 'none';
+  document.body.appendChild(debugEl);
+  let debugVisible = false;
 
   const remotes = new Map<string, {
     mesh: THREE.Group;
@@ -101,7 +141,10 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
     }
   }
 
-  connect(username, aircraft, handleSnapshot, handleHit);
+  if (mode === GameMode.Multiplayer) {
+    connect(username, aircraft, handleSnapshot, handleHit);
+    setInterval(() => sendState(state), 50);
+  }
 
   const projectiles = new Map<string, { mesh: THREE.Mesh; vel: THREE.Vector3; ttl: number }>();
 
@@ -118,8 +161,6 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
     }
   }
 
-  setInterval(() => sendState(state), 50);
-
   let last = performance.now();
   let acc = 0;
   const FIXED_DT = 1 / 120;
@@ -127,64 +168,94 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
   function animate(now: number) {
     const dt = (now - last) / 1000;
     last = now;
-    const snap = controls.update();
+    const snap = controls.getInputs();
 
-    input.pitch = snap.pitch;
-    input.roll = snap.roll;
-    input.yaw = snap.yaw;
-    state.throttle = THREE.MathUtils.clamp(
-      state.throttle + snap.throttle * dt,
-      0,
-      1
-    );
-    if (snap.fire) fire();
-    if (snap.respawn) {
-      hp = 1;
-      state.position.set(0, 5, 0);
-      state.velocity.set(0, 0, 0);
-      state.orientation.set(0, 0, 0, 1);
-    }
-
-    acc += dt;
-    while (acc >= FIXED_DT) {
-      step(state, input, FIXED_DT);
-      for (const [id, p] of projectiles) {
-        p.mesh.position.add(p.vel.clone().multiplyScalar(FIXED_DT));
-        p.ttl -= FIXED_DT;
-        if (p.ttl <= 0) {
-          scene.remove(p.mesh);
-          projectiles.delete(id);
-        }
+    if (snap.pause) {
+      paused = !paused;
+      if (paused) {
+        pauseMenu.show(mode);
+      } else {
+        pauseMenu.hide();
       }
-      acc -= FIXED_DT;
+    }
+    if (snap.debug) {
+      debugVisible = !debugVisible;
+      debugEl.style.display = debugVisible ? 'block' : 'none';
     }
 
-    local.position.copy(state.position);
-    local.quaternion.copy(state.orientation);
+    if (!paused) {
+      input.pitch = snap.pitch;
+      input.roll = snap.roll;
+      input.yaw = snap.yaw;
+      state.throttle = THREE.MathUtils.clamp(
+        state.throttle + snap.throttleDelta * dt,
+        0,
+        1
+      );
+      if (snap.fire) fire();
+      if (snap.respawn) resetState();
 
-    remotes.forEach((entry) => {
-      entry.currentPos.lerp(entry.targetPos, 0.1);
-      entry.currentQuat.slerp(entry.targetQuat, 0.1);
-      entry.mesh.position.copy(entry.currentPos);
-      entry.mesh.quaternion.copy(entry.currentQuat);
-    });
+      acc += dt;
+      while (acc >= FIXED_DT) {
+        step(state, input, FIXED_DT);
+        for (const [id, p] of projectiles) {
+          p.mesh.position.add(p.vel.clone().multiplyScalar(FIXED_DT));
+          p.ttl -= FIXED_DT;
+          if (p.ttl <= 0) {
+            scene.remove(p.mesh);
+            projectiles.delete(id);
+          }
+        }
+        acc -= FIXED_DT;
+      }
 
-    const speed = state.velocity.length() * 1.94384;
-    const altitude = state.position.y;
-    const euler = new THREE.Euler().setFromQuaternion(state.orientation, 'XYZ');
-    const pitchDeg = THREE.MathUtils.radToDeg(euler.x);
-    const rollDeg = THREE.MathUtils.radToDeg(euler.z);
-    hud.update({
-      spd: speed,
-      alt: altitude,
-      pit: pitchDeg,
-      rol: rollDeg,
-      hp,
-      name: username,
-      aircraft: aircraft === 'raptor' ? 'Raptor-like' : 'Mighty-Dragon-like',
-    });
+      local.position.copy(state.position);
+      local.quaternion.copy(state.orientation);
 
-    chase.update(dt, { x: snap.mouse.x, y: snap.mouse.y });
+      remotes.forEach((entry) => {
+        entry.currentPos.lerp(entry.targetPos, 0.1);
+        entry.currentQuat.slerp(entry.targetQuat, 0.1);
+        entry.mesh.position.copy(entry.currentPos);
+        entry.mesh.quaternion.copy(entry.currentQuat);
+      });
+
+      const speed = state.velocity.length() * 1.94384;
+      const altitude = state.position.y;
+      const euler = new THREE.Euler().setFromQuaternion(state.orientation, 'XYZ');
+      const pitchDeg = THREE.MathUtils.radToDeg(euler.x);
+      const rollDeg = THREE.MathUtils.radToDeg(euler.z);
+      hud.update({
+        spd: speed,
+        alt: altitude,
+        pit: pitchDeg,
+        rol: rollDeg,
+        hp,
+        name: username,
+        aircraft: aircraft === 'raptor' ? 'Raptor-like' : 'Mighty-Dragon-like',
+      });
+    }
+
+    const mouse = snap.mouseLookActive
+      ? { x: snap.mouseDelta.x, y: snap.mouseDelta.y }
+      : undefined;
+    chase.update(dt, mouse);
+
+    if (debugVisible) {
+      const fps = 1 / dt;
+      const localVel = state.velocity
+        .clone()
+        .applyQuaternion(state.orientation.clone().invert());
+      const aoa = THREE.MathUtils.radToDeg(
+        Math.atan2(localVel.y, -localVel.z)
+      );
+      debugEl.textContent =
+        `FPS ${fps.toFixed(0)}\nDT ${(dt * 1000).toFixed(1)}ms\nTHR ${state.throttle.toFixed(
+          2
+        )}\nAoA ${aoa.toFixed(1)}\nInput P${input.pitch.toFixed(2)} R${input.roll.toFixed(2)} Y${input.yaw.toFixed(
+          2
+        )} T${snap.throttleDelta.toFixed(2)}`;
+    }
+
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }

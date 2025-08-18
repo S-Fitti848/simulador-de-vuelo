@@ -4,11 +4,13 @@ export interface InputSnapshot {
   pitch: number;
   roll: number;
   yaw: number;
-  throttle: number; // -1..1 representing change
+  throttleDelta: number; // -1..1 representing change
   fire: boolean;
   respawn: boolean;
   pause: boolean;
-  mouse: Vector2;
+  debug: boolean;
+  mouseDelta: Vector2;
+  mouseLookActive: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export class Controls {
   private fire = false;
   private respawn = false;
   private pause = false;
+  private debug = false;
   private overlay: HTMLDivElement;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -32,7 +35,7 @@ export class Controls {
 
     // overlay helper
     this.overlay = document.createElement('div');
-    this.overlay.textContent = 'Click to focus';
+    this.overlay.textContent = 'Click to focus / RMB for mouse-look';
     this.overlay.style.position = 'absolute';
     this.overlay.style.top = '50%';
     this.overlay.style.left = '50%';
@@ -60,13 +63,22 @@ export class Controls {
       case 'ArrowDown':
       case 'ArrowLeft':
       case 'ArrowRight':
+      case 'PageUp':
+      case 'PageDown':
         e.preventDefault();
         break;
     }
     this.keys.add(e.key);
     if (e.key === ' ') this.fire = true;
     if (e.key === 'r' || e.key === 'R') this.respawn = true;
-    if (e.key === 'Escape') this.pause = true;
+    if (e.key === 'Escape') {
+      this.pause = true;
+      document.exitPointerLock();
+    }
+    if (e.key === 'F1') {
+      e.preventDefault();
+      this.debug = true;
+    }
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
@@ -103,26 +115,53 @@ export class Controls {
   /**
    * Returns current input snapshot and resets one-frame buttons and mouse delta.
    */
-  update(): InputSnapshot {
+  getInputs(): InputSnapshot {
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+      this.keys.clear();
+      this.mouseDelta.set(0, 0);
+      this.fire = false;
+      this.respawn = false;
+      this.pause = false;
+      this.debug = false;
+      return {
+        pitch: 0,
+        roll: 0,
+        yaw: 0,
+        throttleDelta: 0,
+        fire: false,
+        respawn: false,
+        pause: false,
+        debug: false,
+        mouseDelta: new Vector2(),
+        mouseLookActive: this.mouseLook,
+      };
+    }
+
     const pitch = this.keys.has('w') ? 1 : this.keys.has('s') ? -1 : 0;
     const roll = this.keys.has('a') ? 1 : this.keys.has('d') ? -1 : 0;
     const yaw = this.keys.has('q') ? 1 : this.keys.has('e') ? -1 : 0;
-    const throttle = this.keys.has('Shift') ? 1 : this.keys.has('Control') ? -1 : 0;
+    const throttleDelta = this.keys.has('Shift')
+      ? 1
+      : this.keys.has('Control')
+      ? -1
+      : 0;
     const snap: InputSnapshot = {
       pitch,
       roll,
       yaw,
-      throttle,
+      throttleDelta,
       fire: this.fire,
       respawn: this.respawn,
       pause: this.pause,
-      mouse: this.mouseDelta.clone(),
+      debug: this.debug,
+      mouseDelta: this.mouseDelta.clone(),
+      mouseLookActive: this.mouseLook,
     };
-    // reset per-frame
     this.mouseDelta.set(0, 0);
     this.fire = false;
     this.respawn = false;
     this.pause = false;
+    this.debug = false;
     return snap;
   }
 }
