@@ -1,6 +1,7 @@
 import { FlightState } from '../physics/flight';
 import * as THREE from 'three';
 import type { AircraftChoice } from '../ui/landing';
+import type { LobbyMessage } from './types';
 
 export interface PlayerSnapshot {
   id: string;
@@ -29,7 +30,8 @@ export function connect(
   username: string,
   aircraft: AircraftChoice,
   onSnapshot: (snap: Snapshot) => void,
-  onHit: (id: string) => void
+  onHit: (id: string) => void,
+  onLobby?: (msg: LobbyMessage) => void
 ) {
   user = username;
   craft = aircraft;
@@ -47,6 +49,8 @@ export function connect(
       onSnapshot(msg as Snapshot);
     } else if (msg.type === 'hit') {
       onHit(msg.id);
+    } else {
+      onLobby?.(msg as LobbyMessage);
     }
   });
 }

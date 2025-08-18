@@ -2,15 +2,17 @@ import * as THREE from 'three';
 import { FlightState, FlightInput, step } from './physics/flight';
 import { connect, sendState, sendProjectile, Snapshot, id as clientId } from './net/socket';
 import { showLanding, AircraftChoice } from './ui/landing';
+import { showLobby } from './ui/lobby';
 import { createAircraft } from './game/spawn';
 import { createHUD } from './hud/hud';
 import { ChaseCamera } from './cam/chase';
+import { Controls } from './input/controls';
 
 const canvas = document.getElementById('app') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-showLanding(startGame);
+showLanding((result) => showLobby(result, startGame));
 
 function startGame(result: { username: string; aircraft: AircraftChoice }) {
   const { username, aircraft } = result;
@@ -48,6 +50,7 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
 
   const hud = createHUD();
   const chase = new ChaseCamera(camera, local);
+  const controls = new Controls(canvas);
 
   const remotes = new Map<string, {
     mesh: THREE.Group;
@@ -100,85 +103,6 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
 
   connect(username, aircraft, handleSnapshot, handleHit);
 
-  window.addEventListener('keydown', (e) => {
-    if (orbit) return;
-    switch (e.key) {
-      case 'w':
-        input.pitch = 1;
-        break;
-      case 's':
-        input.pitch = -1;
-        break;
-      case 'a':
-        input.roll = 1;
-        break;
-      case 'd':
-        input.roll = -1;
-        break;
-      case 'q':
-        input.yaw = 1;
-        break;
-      case 'e':
-        input.yaw = -1;
-        break;
-      case 'Shift':
-      case 'ShiftLeft':
-      case 'ShiftRight':
-        state.throttle = Math.min(1, state.throttle + 0.1);
-        break;
-      case 'Control':
-      case 'ControlLeft':
-      case 'ControlRight':
-        state.throttle = Math.max(0, state.throttle - 0.1);
-        break;
-      case ' ':
-        fire();
-        break;
-      case 'r':
-      case 'R':
-        hp = 1;
-        state.position.set(0, 5, 0);
-        state.velocity.set(0, 0, 0);
-        state.orientation.set(0, 0, 0, 1);
-        break;
-    }
-  });
-
-  window.addEventListener('keyup', (e) => {
-    switch (e.key) {
-      case 'w':
-      case 's':
-        input.pitch = 0;
-        break;
-      case 'a':
-      case 'd':
-        input.roll = 0;
-        break;
-      case 'q':
-      case 'e':
-        input.yaw = 0;
-        break;
-    }
-  });
-
-  let orbit = false;
-  let yaw = 0;
-  let pitch = 0;
-  window.addEventListener('mousedown', (e) => {
-    if (e.button === 2) orbit = true;
-  });
-  window.addEventListener('mouseup', (e) => {
-    if (e.button === 2) orbit = false;
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (orbit) {
-      yaw -= e.movementX * 0.005;
-      pitch -= e.movementY * 0.005;
-      chase.setOrbit(yaw, pitch);
-    }
-  });
-  window.addEventListener('contextmenu', (e) => e.preventDefault());
-
   const projectiles = new Map<string, { mesh: THREE.Mesh; vel: THREE.Vector3; ttl: number }>();
 
   function fire() {
@@ -203,6 +127,24 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
   function animate(now: number) {
     const dt = (now - last) / 1000;
     last = now;
+    const snap = controls.update();
+
+    input.pitch = snap.pitch;
+    input.roll = snap.roll;
+    input.yaw = snap.yaw;
+    state.throttle = THREE.MathUtils.clamp(
+      state.throttle + snap.throttle * dt,
+      0,
+      1
+    );
+    if (snap.fire) fire();
+    if (snap.respawn) {
+      hp = 1;
+      state.position.set(0, 5, 0);
+      state.velocity.set(0, 0, 0);
+      state.orientation.set(0, 0, 0, 1);
+    }
+
     acc += dt;
     while (acc >= FIXED_DT) {
       step(state, input, FIXED_DT);
@@ -242,7 +184,7 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
       aircraft: aircraft === 'raptor' ? 'Raptor-like' : 'Mighty-Dragon-like',
     });
 
-    chase.update(dt);
+    chase.update(dt, { x: snap.mouse.x, y: snap.mouse.y });
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
