@@ -42,8 +42,10 @@ export class Controls {
       if (document.pointerLockElement === canvas) {
         this.yaw -= e.movementX * 0.002;
         this.pitch -= e.movementY * 0.002;
-        const limit = THREE.MathUtils.degToRad(60);
-        this.pitch = THREE.MathUtils.clamp(this.pitch, -limit, limit);
+        const yawLim = THREE.MathUtils.degToRad(90);
+        const pitchLim = THREE.MathUtils.degToRad(60);
+        this.yaw = THREE.MathUtils.clamp(this.yaw, -yawLim, yawLim);
+        this.pitch = THREE.MathUtils.clamp(this.pitch, -pitchLim, pitchLim);
       }
     });
     window.addEventListener('keydown', this.onKeyDown);
@@ -70,6 +72,12 @@ export class Controls {
       (this.keys.has('ControlLeft') || this.keys.has('ControlRight') ? -1 : 0);
     const fire = this.keys.has('Space');
     const respawn = this.keys.has('KeyR');
+
+    if (document.pointerLockElement !== this.canvas) {
+      this.yaw *= 0.9;
+      this.pitch *= 0.9;
+    }
+
     return {
       pitch,
       roll,
