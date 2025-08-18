@@ -1,57 +1,42 @@
 import * as THREE from 'three';
+import { SimpleFlightState } from '../flight/simple';
 
-/**
- * Spring-damped third person chase camera. Mouse movement adjusts yaw/pitch
- * and the camera follows the attached target with a critical damping spring.
- */
+const OFFSET = new THREE.Vector3(-12, 3.5, 0); // behind and slightly above
+const LOOK_AHEAD = 20;
+
+/** Third person chase camera with critically damped spring and mouse-look. */
 export class ChaseCamera {
-  private target: THREE.Object3D | null = null;
   private cam: THREE.PerspectiveCamera;
-  private followOffset = new THREE.Vector3(0, 3.5, -12);
-  private current = new THREE.Vector3();
-  private look = new THREE.Vector3();
-  private yaw = 0;
-  private pitch = 0;
+  private position = new THREE.Vector3();
+  private velocity = new THREE.Vector3();
 
-  constructor(cam: THREE.PerspectiveCamera, target?: THREE.Object3D) {
+  constructor(cam: THREE.PerspectiveCamera) {
     this.cam = cam;
-    if (target) this.attach(target);
   }
 
-  attach(obj: THREE.Object3D) {
-    this.target = obj;
-    this.current.copy(obj.position).add(this.followOffset);
-  }
+  update(dt: number, state: SimpleFlightState, lookYaw: number, lookPitch: number) {
+    const lookRot = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(lookPitch, lookYaw, 0, 'YXZ')
+    );
+    const desiredOffset = OFFSET.clone().applyQuaternion(lookRot).applyQuaternion(state.quat);
+    const desiredPos = state.pos.clone().add(desiredOffset);
 
-  setOffsets(offset: THREE.Vector3) {
-    this.followOffset.copy(offset);
-  }
+    // critically damped spring toward desiredPos
+    const stiffness = 40;
+    const damping = 2 * Math.sqrt(stiffness);
+    const accel = desiredPos
+      .clone()
+      .sub(this.position)
+      .multiplyScalar(stiffness)
+      .add(this.velocity.clone().multiplyScalar(-damping));
+    this.velocity.addScaledVector(accel, dt);
+    this.position.addScaledVector(this.velocity, dt);
+    this.cam.position.copy(this.position);
 
-  update(dt: number, mouse?: { x: number; y: number }) {
-    if (!this.target) return;
-    if (mouse) {
-      this.yaw -= mouse.x * 0.002;
-      this.pitch -= mouse.y * 0.002;
-      this.pitch = THREE.MathUtils.clamp(
-        this.pitch,
-        THREE.MathUtils.degToRad(-60),
-        THREE.MathUtils.degToRad(60)
-      );
-    }
-    const rot = new THREE.Euler(this.pitch, this.yaw, 0);
-    const off = this.followOffset.clone().applyEuler(rot);
-    const desired = off
-      .applyQuaternion(this.target.quaternion)
-      .add(this.target.position);
-    const stiffness = 5; // critical damping approximation
-    this.current.lerp(desired, 1 - Math.exp(-stiffness * dt));
-    this.cam.position.copy(this.current);
-    // look a little ahead of the aircraft to reduce jitter
-    this.look
-      .set(0, 0, -10)
-      .applyQuaternion(this.target.quaternion)
-      .add(this.target.position);
-    this.cam.lookAt(this.look);
+    // look target ahead of aircraft
+    const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(state.quat);
+    const lookDir = forward.clone().applyQuaternion(lookRot);
+    const target = state.pos.clone().addScaledVector(lookDir, LOOK_AHEAD);
+    this.cam.lookAt(target);
   }
 }
-
