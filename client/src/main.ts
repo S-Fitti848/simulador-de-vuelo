@@ -89,6 +89,7 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
     state.position.set(0, 50, 0);
     state.velocity.set(0, 0, -30);
     state.orientation.set(0, 0, 0, 1);
+    state.angularVelocity.set(0, 0, 0);
     state.throttle = 0.6;
   }
   resetState();

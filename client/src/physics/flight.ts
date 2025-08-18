@@ -35,10 +35,14 @@ export function step(state: FlightState, input: FlightInput, dt: number) {
   // Integrate orientation
   const w = state.angularVelocity;
   const q = state.orientation;
-  const dq = new THREE.Quaternion(w.x, w.y, w.z, 0)
-    .multiply(q)
-    .multiplyScalar(0.5 * dt);
-  q.add(dq).normalize();
+  const dq = new THREE.Quaternion(w.x, w.y, w.z, 0).multiply(q);
+  // Scale derivative and integrate without relying on a non-existent
+  // Quaternion.multiplyScalar (previously causing multiply$Scalar errors).
+  q.x += dq.x * 0.5 * dt;
+  q.y += dq.y * 0.5 * dt;
+  q.z += dq.z * 0.5 * dt;
+  q.w += dq.w * 0.5 * dt;
+  q.normalize();
 
   // Force calculations
   const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
