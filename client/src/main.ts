@@ -192,6 +192,7 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
   let last = performance.now();
   let acc = 0;
   const FIXED_DT = 1 / 120;
+  const MAX_STEPS = 5;
   let loopLogged = false;
 
   function animate(now: number) {
@@ -228,8 +229,9 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
       if (snap.fire) fire();
       if (snap.respawn) resetState();
 
-      acc += dt;
-      while (acc >= FIXED_DT) {
+      acc += Math.min(dt, FIXED_DT * MAX_STEPS);
+      let steps = 0;
+      while (acc >= FIXED_DT && steps < MAX_STEPS) {
         step(state, input, FIXED_DT);
         for (const [id, p] of projectiles) {
           p.mesh.position.add(p.vel.clone().multiplyScalar(FIXED_DT));
@@ -240,6 +242,7 @@ function startGame(result: { username: string; aircraft: AircraftChoice }) {
           }
         }
         acc -= FIXED_DT;
+        steps++;
       }
 
       local.position.copy(state.position);
