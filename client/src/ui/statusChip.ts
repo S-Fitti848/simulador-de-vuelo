@@ -1,7 +1,6 @@
-import { GameMode } from '../mode/mode';
-
-export function createStatusChip(mode: GameMode) {
+export function createStatusChip() {
   const chip = document.createElement('div');
+  chip.textContent = 'Mode: Practice';
   chip.style.position = 'absolute';
   chip.style.top = '10px';
   chip.style.right = '10px';
@@ -12,16 +11,5 @@ export function createStatusChip(mode: GameMode) {
   chip.style.fontSize = '12px';
   chip.style.borderRadius = '4px';
   document.body.appendChild(chip);
-
-  function label(m: GameMode) {
-    return m === GameMode.Practice ? 'Mode: Practice' : 'Mode: Multiplayer';
-  }
-
-  chip.textContent = label(mode);
-
-  return {
-    set(m: GameMode) {
-      chip.textContent = label(m);
-    },
-  };
+  return chip;
 }
