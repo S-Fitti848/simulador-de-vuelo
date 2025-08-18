@@ -46,7 +46,11 @@ export class ChaseCamera {
     const stiffness = 5; // critical damping approximation
     this.current.lerp(desired, 1 - Math.exp(-stiffness * dt));
     this.cam.position.copy(this.current);
-    this.look.copy(this.target.position);
+    // look a little ahead of the aircraft to reduce jitter
+    this.look
+      .set(0, 0, -10)
+      .applyQuaternion(this.target.quaternion)
+      .add(this.target.position);
     this.cam.lookAt(this.look);
   }
 }
