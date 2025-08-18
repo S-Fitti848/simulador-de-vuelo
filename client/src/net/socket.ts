@@ -1,8 +1,11 @@
 import { FlightState } from '../physics/flight';
 import * as THREE from 'three';
+import type { AircraftChoice } from '../ui/landing';
 
 export interface PlayerSnapshot {
   id: string;
+  username?: string;
+  aircraft?: AircraftChoice;
   state: {
     pos: [number, number, number];
     quat: [number, number, number, number];
@@ -19,13 +22,23 @@ export interface Snapshot {
 
 let socket: WebSocket | null = null;
 let clientId: string | null = null;
+let user = 'anon';
+let craft: AircraftChoice = 'raptor';
 
 export function connect(
+  username: string,
+  aircraft: AircraftChoice,
   onSnapshot: (snap: Snapshot) => void,
   onHit: (id: string) => void
 ) {
+  user = username;
+  craft = aircraft;
   const url = (import.meta.env.VITE_SERVER_URL || '').replace(/^http/, 'ws');
   socket = new WebSocket(url);
+  socket.addEventListener('open', () => {
+    const join = { type: 'join', username: user, aircraft: craft };
+    socket?.send(JSON.stringify(join));
+  });
   socket.addEventListener('message', (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'hello') {
@@ -46,6 +59,8 @@ export function sendState(state: FlightState) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   const payload = {
     type: 'state',
+    username: user,
+    aircraft: craft,
     state: {
       pos: [state.position.x, state.position.y, state.position.z],
       quat: [state.orientation.x, state.orientation.y, state.orientation.z, state.orientation.w],
