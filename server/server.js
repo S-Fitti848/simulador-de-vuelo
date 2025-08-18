@@ -31,5 +31,9 @@ const server = app.listen(port, host, () => {
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
+  console.log('ws connect');
   ws.send('hello');
+  ws.on('close', () => {
+    console.log('ws disconnect');
+  });
 });
