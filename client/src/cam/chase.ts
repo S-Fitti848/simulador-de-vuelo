@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { SimpleFlightState } from '../flight/simple';
 
-const OFFSET = new THREE.Vector3(-12, 3.5, 0); // local offset (up, back)
+const CAM_BACK = 12;
+const CAM_UP = 3.5;
+const OFFSET = new THREE.Vector3(-CAM_BACK, CAM_UP, 0); // behind and above the craft
 const LOOK_AHEAD = 20;
 
 /** Third person chase camera with critically damped spring and mouse-look. */

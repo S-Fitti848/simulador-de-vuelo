@@ -25,6 +25,7 @@ export const ROLL_MAX = 1.2;
 export const RATE_SMOOTH = 0.15;
 export const SPEED_GAIN = 1.5;
 export const COORD_YAW_GAIN = 0.2;
+export const DRAG_K = 0.0004;
 export const GROUND_Y = 0;
 export const SKY_Y = 4000;
 export const WORLD_HALF = 50000;
@@ -48,6 +49,8 @@ export function step(state: SimpleFlightState, input: SimpleFlightInput, h: numb
 
   const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
   state.speed += (state.speedTarget - state.speed) * SPEED_GAIN * h;
+  state.speed -= DRAG_K * state.speed * state.speed * h;
+  if (state.speed < 0) state.speed = 0;
   state.vel.copy(forward).multiplyScalar(state.speed);
   state.pos.addScaledVector(state.vel, h);
 
