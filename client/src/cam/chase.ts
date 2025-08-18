@@ -1,37 +1,53 @@
 import * as THREE from 'three';
 
 /**
- * Simple spring-damped chase camera.
+ * Spring-damped third person chase camera. Mouse movement adjusts yaw/pitch
+ * and the camera follows the attached target with a critical damping spring.
  */
 export class ChaseCamera {
-  private target: THREE.Object3D;
+  private target: THREE.Object3D | null = null;
   private cam: THREE.PerspectiveCamera;
-  private offset = new THREE.Vector3(0, 3.5, -12);
+  private followOffset = new THREE.Vector3(0, 3.5, -12);
   private current = new THREE.Vector3();
   private look = new THREE.Vector3();
   private yaw = 0;
   private pitch = 0;
 
-  constructor(cam: THREE.PerspectiveCamera, target: THREE.Object3D) {
+  constructor(cam: THREE.PerspectiveCamera, target?: THREE.Object3D) {
     this.cam = cam;
-    this.target = target;
-    this.current.copy(target.position).add(this.offset);
+    if (target) this.attach(target);
   }
 
-  update(dt: number) {
+  attach(obj: THREE.Object3D) {
+    this.target = obj;
+    this.current.copy(obj.position).add(this.followOffset);
+  }
+
+  setOffsets(offset: THREE.Vector3) {
+    this.followOffset.copy(offset);
+  }
+
+  update(dt: number, mouse?: { x: number; y: number }) {
+    if (!this.target) return;
+    if (mouse) {
+      this.yaw -= mouse.x * 0.002;
+      this.pitch -= mouse.y * 0.002;
+      this.pitch = THREE.MathUtils.clamp(
+        this.pitch,
+        THREE.MathUtils.degToRad(-60),
+        THREE.MathUtils.degToRad(60)
+      );
+    }
     const rot = new THREE.Euler(this.pitch, this.yaw, 0);
-    const off = this.offset.clone().applyEuler(rot);
-    const desired = off.applyQuaternion(this.target.quaternion).add(this.target.position);
-    const stiffness = 5;
+    const off = this.followOffset.clone().applyEuler(rot);
+    const desired = off
+      .applyQuaternion(this.target.quaternion)
+      .add(this.target.position);
+    const stiffness = 5; // critical damping approximation
     this.current.lerp(desired, 1 - Math.exp(-stiffness * dt));
     this.cam.position.copy(this.current);
     this.look.copy(this.target.position);
     this.cam.lookAt(this.look);
-  }
-
-  setOrbit(yaw: number, pitch: number) {
-    this.yaw = THREE.MathUtils.clamp(yaw, THREE.MathUtils.degToRad(-60), THREE.MathUtils.degToRad(60));
-    this.pitch = THREE.MathUtils.clamp(pitch, THREE.MathUtils.degToRad(-60), THREE.MathUtils.degToRad(60));
   }
 }
 
