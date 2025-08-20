@@ -1,3 +1,4 @@
+/client/src/input/controls.ts
 import * as THREE from 'three';
 
 export class Controls {
