@@ -1,92 +1,84 @@
 import * as THREE from 'three';
 
-export interface InputState {
-  pitch: number; // W/S [-1,1]
-  roll: number;  // A/D [-1,1]
-  yaw: number;   // Q/E [-1,1]
-  throttle: number; // Shift/Ctrl [-1,1]
-  fire: boolean;
-  respawn: boolean;
-  lookYaw: number; // radians
-  lookPitch: number; // radians
-}
-
-/** Centralised keyboard and mouse controls with RMB pointer lock. */
 export class Controls {
-  private keys = new Set<string>();
   private canvas: HTMLCanvasElement;
-  private yaw = 0;
-  private pitch = 0;
+  private keys: { [key: string]: boolean } = {};
+  private mouse: { x: number; y: number; down: boolean } = { x: 0, y: 0, down: false };
+  private inputs = { pitch: 0, roll: 0, yaw: 0, throttle: 0, fire: false, respawn: false, pause: false };
+  private pointerLocked = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    canvas.tabIndex = 0;
-    canvas.style.outline = 'none';
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 2) {
-        canvas.requestPointerLock();
-      } else {
-        canvas.focus();
-      }
-    });
-    document.addEventListener('mouseup', (e) => {
-      if (e.button === 2) document.exitPointerLock();
-    });
-    document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement !== canvas) {
-        // nothing
-      }
-    });
-    document.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement === canvas) {
-        this.yaw -= e.movementX * 0.002;
-        this.pitch -= e.movementY * 0.002;
-        const yawLim = THREE.MathUtils.degToRad(90);
-        const pitchLim = THREE.MathUtils.degToRad(60);
-        this.yaw = THREE.MathUtils.clamp(this.yaw, -yawLim, yawLim);
-        this.pitch = THREE.MathUtils.clamp(this.pitch, -pitchLim, pitchLim);
-      }
-    });
-    window.addEventListener('keydown', this.onKeyDown);
-    window.addEventListener('keyup', this.onKeyUp);
+    this.canvas.tabIndex = 0;
+    this.setupEventListeners();
+    this.showFocusHint();
   }
 
-  private onKeyDown = (e: KeyboardEvent) => {
-    if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+  private showFocusHint() {
+    const hint = document.createElement('div');
+    hint.style.position = 'absolute';
+    hint.style.top = '10px';
+    hint.style.left = '10px';
+    hint.style.color = 'white';
+    hint.style.background = 'rgba(0,0,0,0.5)';
+    hint.style.padding = '5px';
+    hint.innerText = 'Click canvas to focus';
+    document.body.appendChild(hint);
+    this.canvas.addEventListener('focus', () => hint.remove());
+  }
+
+  private setupEventListeners() {
+    window.addEventListener('keydown', (e) => {
+      this.keys[e.code] = true;
       e.preventDefault();
-    }
-    this.keys.add(e.code);
-  };
+    });
+    window.addEventListener('keyup', (e) => {
+      this.keys[e.code] = false;
+      e.preventDefault();
+    });
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 2) {
+        this.canvas.requestPointerLock();
+        this.mouse.down = true;
+      }
+    });
+    this.canvas.addEventListener('mouseup', (e) => {
+      if (e.button === 2) {
+        this.mouse.down = false;
+        this.mouse.x = 0;
+        this.mouse.y = 0;
+      }
+    });
+    document.addEventListener('pointerlockchange', () => {
+      this.pointerLocked = document.pointerLockElement === this.canvas;
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (this.pointerLocked) {
+        this.mouse.x += e.movementX * 0.002;
+        this.mouse.y += e.movementY * 0.002;
+      }
+    });
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
 
-  private onKeyUp = (e: KeyboardEvent) => {
-    this.keys.delete(e.code);
-  };
-
-  getInputs(): InputState {
-    const pitch = (this.keys.has('KeyW') ? 1 : 0) + (this.keys.has('KeyS') ? -1 : 0);
-    const roll = (this.keys.has('KeyD') ? 1 : 0) + (this.keys.has('KeyA') ? -1 : 0);
-    const yaw = (this.keys.has('KeyE') ? 1 : 0) + (this.keys.has('KeyQ') ? -1 : 0);
-    const throttle =
-      (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 1 : 0) +
-      (this.keys.has('ControlLeft') || this.keys.has('ControlRight') ? -1 : 0);
-    const fire = this.keys.has('Space');
-    const respawn = this.keys.has('KeyR');
-
-    if (document.pointerLockElement !== this.canvas) {
-      this.yaw *= 0.9;
-      this.pitch *= 0.9;
-    }
-
+  update() {
+    this.inputs.pitch = (this.keys['KeyW'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0);
+    this.inputs.roll = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] ? 1 : 0);
+    this.inputs.yaw = (this.keys['KeyE'] ? 1 : 0) - (this.keys['KeyQ'] ? 1 : 0);
+    this.inputs.throttle = (this.keys['ShiftLeft'] ? 1 : 0) - (this.keys['ControlLeft'] ? 1 : 0);
+    this.inputs.fire = this.keys['Space'];
+    this.inputs.respawn = this.keys['KeyR'];
+    this.inputs.pause = this.keys['Escape'];
     return {
-      pitch,
-      roll,
-      yaw,
-      throttle,
-      fire,
-      respawn,
-      lookYaw: this.yaw,
-      lookPitch: this.pitch,
+      pitch: this.inputs.pitch,
+      roll: this.inputs.roll,
+      yaw: this.inputs.yaw,
+      throttle: this.inputs.throttle,
+      fire: this.inputs.fire,
+      respawn: this.inputs.respawn,
+      pause: this.inputs.pause,
+      mouseX: this.mouse.down ? this.mouse.x : 0,
+      mouseY: this.mouse.down ? this.mouse.y : 0,
     };
   }
 }

@@ -1,47 +1,42 @@
 import * as THREE from 'three';
-import { SimpleFlightState } from '../flight/simple';
 
-const CAM_BACK = 12;
-const CAM_UP = 3.5;
-const OFFSET = new THREE.Vector3(-CAM_BACK, CAM_UP, 0); // behind and above the craft
-const LOOK_AHEAD = 20;
-
-/** Third person chase camera with critically damped spring and mouse-look. */
 export class ChaseCamera {
-  private cam: THREE.PerspectiveCamera;
+  private camera: THREE.PerspectiveCamera;
   private position = new THREE.Vector3();
   private velocity = new THREE.Vector3();
+  private mouseOffset = new THREE.Vector2();
+  private readonly CAM_UP = 2;
+  private readonly CAM_BACK = 10;
+  private readonly LOOK_AHEAD = 10;
+  private readonly SPRING_K = 25;
+  private readonly DAMPING = 10;
 
-  constructor(cam: THREE.PerspectiveCamera) {
-    this.cam = cam;
+  constructor(camera: THREE.PerspectiveCamera) {
+    this.camera = camera;
   }
 
-  update(dt: number, state: SimpleFlightState, lookYaw: number, lookPitch: number) {
-    const desiredPos = state.pos
-      .clone()
-      .add(OFFSET.clone().applyQuaternion(state.quat));
-
-    const lookRot = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(lookPitch, lookYaw, 0, 'YXZ')
+  update(aircraft: { position: THREE.Vector3; quaternion: THREE.Quaternion }, mouse: { x: number; y: number }, h: number) {
+    const offset = new THREE.Vector3(0, this.CAM_UP, -this.CAM_BACK).applyQuaternion(aircraft.quaternion);
+    const desired = aircraft.position.clone().add(offset);
+    const look = aircraft.position.clone().add(
+      new THREE.Vector3(0, 0, this.LOOK_AHEAD).applyQuaternion(aircraft.quaternion)
     );
 
-    // critically damped spring toward desiredPos
-    const stiffness = 40;
-    const damping = 2 * Math.sqrt(stiffness);
-    const accel = desiredPos
-      .clone()
-      .sub(this.position)
-      .multiplyScalar(stiffness)
-      .add(this.velocity.clone().multiplyScalar(-damping));
-    this.velocity.addScaledVector(accel, dt);
-    this.position.addScaledVector(this.velocity, dt);
-    this.cam.position.copy(this.position);
+    const mouseAdjust = new THREE.Vector3(0, Math.max(-Math.PI / 4, Math.min(Math.PI / 4, this.mouseOffset.y)), this.mouseOffset.x);
+    look.add(new THREE.Vector3(0, mouseAdjust.y * 5, 0).applyQuaternion(aircraft.quaternion));
 
-    // look target ahead of aircraft with local yaw/pitch offsets
-    const lookDir = new THREE.Vector3(1, 0, 0)
-      .applyQuaternion(lookRot)
-      .applyQuaternion(state.quat);
-    const target = state.pos.clone().addScaledVector(lookDir, LOOK_AHEAD);
-    this.cam.lookAt(target);
+    const delta = desired.clone().sub(this.position);
+    const accel = delta.multiplyScalar(this.SPRING_K).sub(this.velocity.clone().multiplyScalar(this.DAMPING));
+    this.velocity.addScaledVector(accel, h);
+    this.position.addScaledVector(this.velocity, h);
+
+    this.camera.position.copy(this.position);
+    this.camera.lookAt(look);
+
+    this.mouseOffset.x = THREE.MathUtils.lerp(this.mouseOffset.x, mouse.x, 5 * h);
+    this.mouseOffset.y = THREE.MathUtils.lerp(this.mouseOffset.y, mouse.y, 5 * h);
+    if (!mouse.x && !mouse.y) {
+      this.mouseOffset.lerp(new THREE.Vector2(), 5 * h);
+    }
   }
 }
