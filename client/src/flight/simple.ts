@@ -1,61 +1,101 @@
 import * as THREE from 'three';
 
-export class SimpleFlight {
-  private position = new THREE.Vector3(0, 50, 0);
-  private quaternion = new THREE.Quaternion();
-  private velocity = new THREE.Vector3(0, 0, 120);
-  private throttle = 0.6;
-  private speed = 120;
-  private angularRates = new THREE.Vector3();
-  private hp = 100;
+export interface SimpleFlightState {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  quat: THREE.Quaternion;
+  yawRate: number;
+  pitchRate: number;
+  rollRate: number;
+  speed: number;
+  speedTarget: number;
+}
 
-  private readonly MIN_SPEED = 50;
-  private readonly MAX_SPEED = 200;
-  private readonly SPEED_GAIN = 2;
-  private readonly ROLL_MAX = 1;
-  private readonly PITCH_MAX = 1;
-  private readonly YAW_MAX = 0.5;
-  private readonly DRAG = 0.1;
+export interface SimpleFlightInput {
+  pitch: number;
+  roll: number;
+  yaw: number;
+  throttle: number;
+}
 
-  reset() {
-    this.position.set(0, 50, 0);
-    this.quaternion.set(0, 0, 0, 1).normalize();
-    this.velocity.set(0, 0, 120);
-    this.throttle = 0.6;
-    this.speed = 120;
-    this.angularRates.set(0, 0, 0);
-    this.hp = 100;
+export const H = 1 / 120;
+export const YAW_MAX = 0.6;
+export const PITCH_MAX = 0.8;
+export const ROLL_MAX = 1.2;
+export const RATE_SMOOTH = 0.15;
+export const SPEED_GAIN = 1.5;
+export const COORD_YAW_GAIN = 0.2;
+export const DRAG_K = 0.0004;
+export const GROUND_Y = 0;
+export const SKY_Y = 4000;
+export const WORLD_HALF = 50000;
+
+export function step(state: SimpleFlightState, input: SimpleFlightInput, h: number) {
+  state.yawRate += (input.yaw * YAW_MAX - state.yawRate) * RATE_SMOOTH;
+  state.pitchRate += (input.pitch * PITCH_MAX - state.pitchRate) * RATE_SMOOTH;
+  state.rollRate += (input.roll * ROLL_MAX - state.rollRate) * RATE_SMOOTH;
+  state.yawRate += state.rollRate * COORD_YAW_GAIN;
+
+  const wx = state.rollRate;
+  const wy = state.pitchRate;
+  const wz = state.yawRate;
+  const q = state.quat;
+  const dq = new THREE.Quaternion(wx, wy, wz, 0).multiply(q);
+  q.x += dq.x * 0.5 * h;
+  q.y += dq.y * 0.5 * h;
+  q.z += dq.z * 0.5 * h;
+  q.w += dq.w * 0.5 * h;
+  q.normalize();
+
+  const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+  state.speed += (state.speedTarget - state.speed) * SPEED_GAIN * h;
+  state.speed -= DRAG_K * state.speed * state.speed * h;
+  if (state.speed < 0) state.speed = 0;
+  state.vel.copy(forward).multiplyScalar(state.speed);
+  state.pos.addScaledVector(state.vel, h);
+
+  if (state.pos.y < GROUND_Y) {
+    state.pos.y = GROUND_Y;
+    if (state.vel.y < 0) state.vel.y = 0;
   }
-
-  update(inputs: { pitch: number; roll: number; yaw: number; throttle: number }, h: number) {
-    this.throttle = Math.max(0, Math.min(1, this.throttle + inputs.throttle * h));
-    const speedTarget = THREE.MathUtils.lerp(this.MIN_SPEED, this.MAX_SPEED, this.throttle);
-    this.speed += (speedTarget - this.speed) * this.SPEED_GAIN * h;
-    this.speed *= 1 - this.DRAG * h;
-
-    const targetRates = new THREE.Vector3(
-      inputs.pitch * this.PITCH_MAX,
-      inputs.yaw * this.YAW_MAX,
-      inputs.roll * this.ROLL_MAX
-    );
-    this.angularRates.lerp(targetRates, 5 * h);
-
-    const rot = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(this.angularRates.x * h, this.angularRates.y * h, -this.angularRates.z * h, 'YXZ')
-    );
-    this.quaternion.multiply(rot).normalize();
-
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.quaternion);
-    this.velocity.copy(forward).multiplyScalar(this.speed);
-    this.position.addScaledVector(this.velocity, h);
-
-    this.position.y = Math.max(0, Math.min(4000, this.position.y));
-    if (this.position.x < -50000 || this.position.x > 50000 || 
-        this.position.z < -50000 || this.position.z > 50000 || 
-        isNaN(this.position.x) || isNaN(this.position.y) || isNaN(this.position.z)) {
-      this.reset();
-    }
-
-    return { position: this.position, quaternion: this.quaternion, velocity: this.velocity, throttle: this.throttle, hp: this.hp };
+  if (state.pos.y > SKY_Y) {
+    state.pos.y = SKY_Y;
+    if (state.vel.y > 0) state.vel.y = 0;
   }
+  if (state.pos.x < -WORLD_HALF) {
+    state.pos.x = -WORLD_HALF;
+    state.vel.x = Math.abs(state.vel.x);
+  }
+  if (state.pos.x > WORLD_HALF) {
+    state.pos.x = WORLD_HALF;
+    state.vel.x = -Math.abs(state.vel.x);
+  }
+  if (state.pos.z < -WORLD_HALF) {
+    state.pos.z = -WORLD_HALF;
+    state.vel.z = Math.abs(state.vel.z);
+  }
+  if (state.pos.z > WORLD_HALF) {
+    state.pos.z = WORLD_HALF;
+    state.vel.z = -Math.abs(state.vel.z);
+  }
+}
+
+export function isFiniteState(state: SimpleFlightState): boolean {
+  return [
+    state.pos.x,
+    state.pos.y,
+    state.pos.z,
+    state.vel.x,
+    state.vel.y,
+    state.vel.z,
+    state.quat.x,
+    state.quat.y,
+    state.quat.z,
+    state.quat.w,
+    state.yawRate,
+    state.pitchRate,
+    state.rollRate,
+    state.speed,
+    state.speedTarget,
+  ].every(Number.isFinite);
 }
