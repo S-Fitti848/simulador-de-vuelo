@@ -1,3 +1,4 @@
+/client/src/flight/simple.ts
 import * as THREE from 'three';
 
 export class SimpleFlight {
