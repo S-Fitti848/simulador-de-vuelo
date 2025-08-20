@@ -1,5 +1,4 @@
-import * as THREE from 'three';
-
+/client/src/hud/hud.ts
 export class HUD {
   private element: HTMLDivElement;
 
