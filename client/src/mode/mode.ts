@@ -1,15 +1,16 @@
-export enum GameMode {
-  Practice = 'practice',
-  Multiplayer = 'multiplayer',
-}
+export class ModeManager {
+  private mode: string;
 
-const KEY = 'fsim.mode';
+  constructor() {
+    this.mode = localStorage.getItem('fsim.mode') || 'Practice';
+    localStorage.setItem('fsim.mode', this.mode);
+  }
 
-export function getMode(): GameMode {
-  const stored = localStorage.getItem(KEY) as GameMode | null;
-  return stored === GameMode.Multiplayer ? GameMode.Multiplayer : GameMode.Practice;
-}
+  getMode() {
+    return this.mode;
+  }
 
-export function setMode(mode: GameMode) {
-  localStorage.setItem(KEY, mode);
+  isPractice() {
+    return this.mode === 'Practice';
+  }
 }

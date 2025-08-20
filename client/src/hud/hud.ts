@@ -1,41 +1,22 @@
-export interface HUDData {
-  spd: number;
-  alt: number;
-  pit: number;
-  rol: number;
-  hp: number;
-  name: string;
-  aircraft: string;
+import * as THREE from 'three';
+
+export class HUD {
+  private element: HTMLDivElement;
+
+  constructor() {
+    this.element = document.createElement('div');
+    this.element.style.position = 'absolute';
+    this.element.style.top = '10px';
+    this.element.style.right = '10px';
+    this.element.style.color = 'white';
+    this.element.style.background = 'rgba(0,0,0,0.5)';
+    this.element.style.padding = '5px';
+    document.body.appendChild(this.element);
+  }
+
+  update(flight: { throttle: number; velocity: THREE.Vector3; position: THREE.Vector3 }, mode: string) {
+    const speedKt = flight.velocity.length() * 1.94384; // m/s to knots
+    const altM = flight.position.y;
+    this.element.innerText = `Speed: ${speedKt.toFixed(0)} kt\nAltitude: ${altM.toFixed(0)} m\nThrottle: ${(flight.throttle * 100).toFixed(0)}%\nMode: ${mode}`;
+  }
 }
-
-export function createHUD() {
-  const hud = document.createElement('div');
-  hud.style.position = 'absolute';
-  hud.style.top = '10px';
-  hud.style.left = '10px';
-  hud.style.color = 'white';
-  hud.style.fontFamily = 'monospace';
-  hud.style.whiteSpace = 'pre';
-  document.body.appendChild(hud);
-
-  const killed = document.createElement('div');
-  killed.style.position = 'absolute';
-  killed.style.top = '50%';
-  killed.style.left = '50%';
-  killed.style.transform = 'translate(-50%, -50%)';
-  killed.style.color = 'red';
-  killed.style.fontFamily = 'sans-serif';
-  killed.style.fontSize = '32px';
-  killed.style.display = 'none';
-  killed.textContent = 'KILLED — press R to respawn';
-  document.body.appendChild(killed);
-
-  return {
-    update(d: HUDData) {
-      hud.textContent =
-        `SPD ${d.spd.toFixed(0)}kn\nALT ${d.alt.toFixed(0)}m\nPIT ${d.pit.toFixed(0)}\u00b0\nROL ${d.rol.toFixed(0)}\u00b0\nHP ${d.hp}\nACFT ${d.aircraft}\nNAME ${d.name}`;
-      killed.style.display = d.hp <= 0 ? 'block' : 'none';
-    },
-  };
-}
-
