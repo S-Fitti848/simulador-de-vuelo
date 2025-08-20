@@ -1,3 +1,4 @@
+/client/src/main.ts
 import * as THREE from 'three';
 import { Controls } from './input/controls';
 import { SimpleFlight } from './flight/simple';
