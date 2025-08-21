@@ -6,7 +6,7 @@ export class ChaseCamera {
   private velocity = new THREE.Vector3();
   private mouseOffset = new THREE.Vector2();
   private readonly CAM_UP = 2;
-  private readonly CAM_BACK = 10;
+  private readonly CAM_BACK = 4;
   private readonly LOOK_AHEAD = 10;
   private readonly SPRING_K = 25;
   private readonly DAMPING = 10;
