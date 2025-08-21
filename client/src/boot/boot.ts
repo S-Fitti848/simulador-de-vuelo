@@ -1,40 +1,31 @@
+/client/src/boot/boot.ts
+// Changes: Added errorMessage param to handleError, so it shows specific errors like "File not found" in the overlay.
 export class BootOverlay {
   private element: HTMLDivElement;
+  private logs: string[] = [];
 
   constructor() {
     this.element = document.createElement('div');
-    Object.assign(this.element.style, {
-      position: 'fixed',
-      top: '0',
-      left: '0',
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#000',
-      color: '#fff',
-      fontFamily: 'sans-serif',
-      fontSize: '24px',
-      zIndex: '1000',
-    } as CSSStyleDeclaration);
-    this.element.innerText = 'Loading...';
+    this.element.style.position = 'absolute';
+    this.element.style.top = '10px';
+    this.element.style.left = '10px';
+    this.element.style.color = 'white';
+    this.element.style.background = 'rgba(0,0,0,0.5)';
+    this.element.style.padding = '5px';
     document.body.appendChild(this.element);
 
     window.addEventListener('error', (e) => this.handleError(e.message));
-    window.addEventListener('unhandledrejection', (e) => this.handleError(String(e.reason)));
+    window.addEventListener('unhandledrejection', (e) => this.handleError(e.reason));
   }
 
   log(message: string) {
-    this.element.innerText = message;
+    this.logs.push(message);
+    if (this.logs.length > 5) this.logs.shift();
+    this.element.innerText = this.logs.join('\n');
   }
 
-  done() {
-    this.element.remove();
-  }
-
-  private handleError(message: string) {
-    this.element.style.background = 'rgba(255,0,0,0.8)';
-    this.element.innerText = `Error: ${message}`;
+  handleError(message: string) {
+    this.element.style.background = 'rgba(255,0,0,0.5)';
+    this.element.innerText = `Error: ${message}\n` + this.logs.join('\n');
   }
 }
