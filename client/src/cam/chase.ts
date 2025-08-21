@@ -1,4 +1,3 @@
-/client/src/cam/chase.ts
 import * as THREE from 'three';
 
 export class ChaseCamera {
