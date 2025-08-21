@@ -1,4 +1,4 @@
-// Improved terrain—added multi-frequency sine waves for more varied hills (up to 50m, with smaller ripples). Increased geometry resolution (200x200) for smoother look. No other big changes, but ensures compatibility with updated flight and camera.
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { Controls } from './input/controls';
@@ -48,15 +48,15 @@ export class FlightSim {
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
 
     this.boot.log('Setting up ground and sky...');
-    const groundGeo = new THREE.PlaneGeometry(100000, 100000, 200, 200); // Higher res for better terrain
+    const groundGeo = new THREE.PlaneGeometry(100000, 100000, 200, 200);
     const pos = groundGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      const y = Math.sin(x / 500 + z / 300) * 50 + Math.sin(x / 100) * 10 + Math.cos(z / 200) * 20; // Multi-sine for varied hills
+      const y = Math.sin(x / 500 + z / 500) * 50 + Math.sin(x / 100) * 10 + Math.cos(z / 200) * 20;
       pos.setY(i, y);
     }
-    groundGeo.computeVertexNormals(); // For better lighting
+    groundGeo.computeVertexNormals();
     const ground = new THREE.Mesh(
       groundGeo,
       new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 1 })
@@ -92,53 +92,44 @@ export class FlightSim {
 
     this.boot.log('Loading 3D models...');
     const loader = new GLTFLoader();
-    loader.load(
-      '/models/f-22_raptor_-_fighter_jet_-_free.glb',
-      (gltf) => {
-        this.f22Model = gltf.scene;
-        this.f22Model.position.set(0, 0, 0);
-        this.f22Model.scale.set(0.05, 0.05, 0.05);
-        this.f22Model.rotation.y = Math.PI;
-        this.f22Model.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-        this.f22Model.visible = true;
-        this.aircraft.add(this.f22Model);
-        this.boot.log('F-22 model loaded');
-      },
-      undefined,
-      (error) => {
-        console.error('F-22 load error:', error);
-        this.boot.log('F-22 load failed');
-      }
-    );
+    loader.load('/models/f22.glb', (gltf) => {
+      this.f22Model = gltf.scene;
+      this.f22Model.scale.set(1, 1, 1); // Adjusted for smaller models; change to 0.05 if using original big ones
+      this.f22Model.rotation.y = Math.PI;
+      this.f22Model.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      this.aircraft.add(this.f22Model);
+      this.boot.log('F-22 model loaded');
+    }, undefined, (error) => {
+      this.boot.handleError(`F-22 load error: ${error.message}`); // Show specific error in overlay
+      // Placeholder if failed
+      const placeholder = new THREE.Mesh(new THREE.BoxGeometry(5, 2, 10), new THREE.MeshStandardMaterial({ color: 0x0000ff }));
+      placeholder.rotation.y = Math.PI;
+      this.aircraft.add(placeholder);
+      this.boot.log('Using placeholder plane (F-22 failed)');
+    });
 
-    loader.load(
-      '/models/sukhoi_su-57_felon_-_fighter_jet_-_free.glb',
-      (gltf) => {
-        this.su57Model = gltf.scene;
-        this.su57Model.position.set(0, 0, 0);
-        this.su57Model.scale.set(0.05, 0.05, 0.05);
-        this.su57Model.rotation.y = Math.PI;
-        this.su57Model.visible = false;
-        this.su57Model.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-        this.aircraft.add(this.su57Model);
-        this.boot.log('SU-57 model loaded');
-      },
-      undefined,
-      (error) => {
-        console.error('SU-57 load error:', error);
-        this.boot.log('SU-57 load failed');
-      }
-    );
+    loader.load('/models/su57.glb', (gltf) => {
+      this.su57Model = gltf.scene;
+      this.su57Model.scale.set(1, 1, 1); // Adjusted for smaller models
+      this.su57Model.rotation.y = Math.PI;
+      this.su57Model.visible = false;
+      this.su57Model.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      this.aircraft.add(this.su57Model);
+      this.boot.log('SU-57 model loaded');
+    }, undefined, (error) => {
+      this.boot.handleError(`SU-57 load error: ${error.message}`);
+      this.boot.log('SU-57 failed, sticking with F-22 or placeholder');
+    });
 
     // Sounds
     if (AudioContext) {
@@ -170,34 +161,30 @@ export class FlightSim {
       this.chaseCamera.update(flightState, { x: inputs.mouseX, y: inputs.mouseY }, this.h);
       this.hud.update(flightState, this.mode.getMode());
 
-      // Toggle plane
       if (inputs.planeToggle && !this.wasPlaneToggle) {
         if (this.currentPlane === 'f22' && this.su57Model) {
           if (this.f22Model) this.f22Model.visible = false;
           this.su57Model.visible = true;
           this.currentPlane = 'su57';
-        } else if (this.currentPlane === 'su57' && this.f22Model) {
-          if (this.su57Model) this.su57Model.visible = false;
+        } else if (this.f22Model) {
+          this.su57Model.visible = false;
           this.f22Model.visible = true;
           this.currentPlane = 'f22';
         }
       }
       this.wasPlaneToggle = inputs.planeToggle;
 
-      // Toggle view
       if (inputs.viewToggle && !this.wasViewToggle) {
         this.chaseCamera.toggleView();
       }
       this.wasViewToggle = inputs.viewToggle;
 
-      // Fire missile
       if (inputs.fire && !this.wasFire) {
         const missile = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
         missile.position.copy(flightState.position);
         const vel = new THREE.Vector3(0, 0, 500).applyQuaternion(flightState.quaternion).add(flightState.velocity);
         this.scene.add(missile);
         this.missiles.push({ obj: missile, vel, time: 5 });
-        // Fire sound
         if (AudioContext) {
           const ctx = new AudioContext();
           const osc = ctx.createOscillator();
@@ -213,7 +200,6 @@ export class FlightSim {
       }
       this.wasFire = inputs.fire;
 
-      // Update missiles
       this.missiles = this.missiles.filter((m) => {
         m.obj.position.add(m.vel.clone().multiplyScalar(this.h));
         m.time -= this.h;
@@ -227,7 +213,6 @@ export class FlightSim {
         return true;
       });
 
-      // Update aircraft
       this.aircraft.position.copy(flightState.position);
       this.aircraft.quaternion.copy(flightState.quaternion);
 
