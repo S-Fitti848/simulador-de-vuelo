@@ -1,4 +1,3 @@
-/client/src/boot/boot.ts
 export class BootOverlay {
   private element: HTMLDivElement;
   private logs: string[] = [];

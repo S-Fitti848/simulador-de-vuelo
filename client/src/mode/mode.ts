@@ -1,4 +1,3 @@
-/client/src/mode/mode.ts
 export class ModeManager {
   private mode: string;
 
@@ -8,7 +7,6 @@ export class ModeManager {
   }
 
   getMode() {
-0389
     return this.mode;
   }
 
