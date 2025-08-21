@@ -92,40 +92,50 @@ export class FlightSim {
 
     this.boot.log('Loading 3D models...');
     const loader = new GLTFLoader();
-    loader.load('/models/f22.glb', (gltf) => {
-      this.f22Model = gltf.scene;
-      this.f22Model.scale.set(0.05, 0.05, 0.05);
-      this.f22Model.rotation.y = Math.PI;
-      this.f22Model.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      this.aircraft.add(this.f22Model);
-      this.boot.log('F-22 model loaded');
-    }, undefined, (error) => {
-      console.error('F-22 load error:', error);
-      this.boot.log('F-22 load failed');
-    });
+    loader.load(
+      '/models/f-22_raptor_-_fighter_jet_-_free.glb',
+      (gltf) => {
+        this.f22Model = gltf.scene;
+        this.f22Model.scale.set(0.05, 0.05, 0.05);
+        this.f22Model.rotation.y = Math.PI;
+        this.f22Model.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+        this.aircraft.add(this.f22Model);
+        this.boot.log('F-22 model loaded');
+      },
+      undefined,
+      (error) => {
+        console.error('F-22 load error:', error);
+        this.boot.log('F-22 load failed');
+      }
+    );
 
-    loader.load('/models/su57.glb', (gltf) => {
-      this.su57Model = gltf.scene;
-      this.su57Model.scale.set(0.05, 0.05, 0.05);
-      this.su57Model.rotation.y = Math.PI;
-      this.su57Model.visible = false;
-      this.su57Model.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      this.aircraft.add(this.su57Model);
-      this.boot.log('SU-57 model loaded');
-    }, undefined, (error) => {
-      console.error('SU-57 load error:', error);
-      this.boot.log('SU-57 load failed');
-    });
+    loader.load(
+      '/models/sukhoi_su-57_felon_-_fighter_jet_-_free.glb',
+      (gltf) => {
+        this.su57Model = gltf.scene;
+        this.su57Model.scale.set(0.05, 0.05, 0.05);
+        this.su57Model.rotation.y = Math.PI;
+        this.su57Model.visible = false;
+        this.su57Model.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+        this.aircraft.add(this.su57Model);
+        this.boot.log('SU-57 model loaded');
+      },
+      undefined,
+      (error) => {
+        console.error('SU-57 load error:', error);
+        this.boot.log('SU-57 load failed');
+      }
+    );
 
     // Sounds
     if (AudioContext) {
