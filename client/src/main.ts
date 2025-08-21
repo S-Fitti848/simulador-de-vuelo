@@ -96,6 +96,7 @@ export class FlightSim {
       '/models/f-22_raptor_-_fighter_jet_-_free.glb',
       (gltf) => {
         this.f22Model = gltf.scene;
+        this.f22Model.position.set(0, 0, 0);
         this.f22Model.scale.set(0.05, 0.05, 0.05);
         this.f22Model.rotation.y = Math.PI;
         this.f22Model.traverse((child) => {
@@ -104,6 +105,7 @@ export class FlightSim {
             child.receiveShadow = true;
           }
         });
+        this.f22Model.visible = true;
         this.aircraft.add(this.f22Model);
         this.boot.log('F-22 model loaded');
       },
@@ -118,6 +120,7 @@ export class FlightSim {
       '/models/sukhoi_su-57_felon_-_fighter_jet_-_free.glb',
       (gltf) => {
         this.su57Model = gltf.scene;
+        this.su57Model.position.set(0, 0, 0);
         this.su57Model.scale.set(0.05, 0.05, 0.05);
         this.su57Model.rotation.y = Math.PI;
         this.su57Model.visible = false;
@@ -173,8 +176,8 @@ export class FlightSim {
           if (this.f22Model) this.f22Model.visible = false;
           this.su57Model.visible = true;
           this.currentPlane = 'su57';
-        } else if (this.f22Model) {
-          this.su57Model.visible = false;
+        } else if (this.currentPlane === 'su57' && this.f22Model) {
+          if (this.su57Model) this.su57Model.visible = false;
           this.f22Model.visible = true;
           this.currentPlane = 'f22';
         }
