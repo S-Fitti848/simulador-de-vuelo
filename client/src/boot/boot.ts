@@ -1,5 +1,4 @@
-/client/src/boot/boot.ts
-// Changes: Added errorMessage param to handleError, so it shows specific errors like "File not found" in the overlay.
+
 export class BootOverlay {
   private element: HTMLDivElement;
   private logs: string[] = [];
