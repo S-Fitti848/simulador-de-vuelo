@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Controls } from './input/controls';
 import { SimpleFlight } from './flight/simple';
 import { ChaseCamera } from './cam/chase';
@@ -21,6 +22,7 @@ export class FlightSim {
   private lastTime = 0;
   private accumulator = 0;
   private readonly h = 1 / 120;
+  private aircraft?: THREE.Object3D;
 
   constructor() {
     this.boot = new BootOverlay();
@@ -41,6 +43,22 @@ export class FlightSim {
     ground.rotation.x = -Math.PI / 2;
     this.scene.add(ground);
     this.scene.background = new THREE.Color(0x87CEEB);
+
+    this.boot.log('Loading aircraft model...');
+    const loader = new GLTFLoader();
+    loader.load(
+      '/models/f-22_raptor_-_fighter_jet_-_free.glb',
+      (gltf) => {
+        this.aircraft = gltf.scene;
+        this.aircraft.scale.set(0.01, 0.01, 0.01);
+        this.scene.add(this.aircraft);
+        this.boot.log('Aircraft ready.');
+      },
+      undefined,
+      (err) => {
+        console.error('Failed to load aircraft model', err);
+      }
+    );
 
     this.boot.log('Initializing systems...');
     this.controls = new Controls(this.renderer.domElement);
@@ -64,6 +82,10 @@ export class FlightSim {
       const inputs = this.controls.update();
       this.spawn.update(inputs);
       const flightState = this.flight.update(inputs, this.h);
+      if (this.aircraft) {
+        this.aircraft.position.copy(flightState.position);
+        this.aircraft.quaternion.copy(flightState.quaternion);
+      }
       this.chaseCamera.update(flightState, { x: inputs.mouseX, y: inputs.mouseY }, this.h);
       this.hud.update(flightState, this.mode.getMode());
       this.accumulator -= this.h;
