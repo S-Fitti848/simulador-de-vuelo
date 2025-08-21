@@ -1,5 +1,6 @@
-/client/src/cam/chase.ts
-// Changes: Made camera closer (CAM_BACK = 3 instead of 10, CAM_UP = 1.5 instead of 2). Ensured it stays strictly behind the plane with better spring damping for smooth following. Cockpit view unchanged.
+// Made camera closer (CAM_BACK = 3 instead of 10, CAM_UP = 1.5 instead of 2).
+// Ensured it stays strictly behind the plane with better spring damping for smooth following.
+// Cockpit view unchanged.
 import * as THREE from 'three';
 
 export class ChaseCamera {
