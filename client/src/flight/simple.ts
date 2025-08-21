@@ -1,5 +1,6 @@
-/client/src/flight/simple.ts
-// Changes: Smoother movement—increased LIFT_K to 0.008 for easier climbs, reduced DRAG_K to 0.0003 for less slowdown, max speed to 350. Added banking: roll affects yaw slightly for natural turns. Stall now gradual (lift reduces to 0.7 min instead of 0.5). Tuned angular rates for responsive control.
+// Smoother movement—increased LIFT_K to 0.008 for easier climbs, reduced DRAG_K to 0.0003 for less slowdown, max speed to 350.
+// Added banking: roll affects yaw slightly for natural turns. Stall now gradual (lift reduces to 0.7 min instead of 0.5).
+// Tuned angular rates for responsive control.
 import * as THREE from 'three';
 
 export class SimpleFlight {

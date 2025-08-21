@@ -1,5 +1,4 @@
-/client/src/main.ts
-// Changes: Improved terrain—added multi-frequency sine waves for more varied hills (up to 50m, with smaller ripples). Increased geometry resolution (200x200) for smoother look. No other big changes, but ensures compatibility with updated flight and camera.
+// Improved terrain—added multi-frequency sine waves for more varied hills (up to 50m, with smaller ripples). Increased geometry resolution (200x200) for smoother look. No other big changes, but ensures compatibility with updated flight and camera.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { Controls } from './input/controls';
