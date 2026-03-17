@@ -10,14 +10,14 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  id-token: write
 
 jobs:
   claude:
     if: contains(github.event.comment.body, '@claude')
     runs-on: ubuntu-latest
     steps:
-      - uses: anthropics/claude-code-action@beta
+      - uses: actions/checkout@v4
+
+      - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
