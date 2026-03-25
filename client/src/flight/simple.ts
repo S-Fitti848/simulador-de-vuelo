@@ -147,7 +147,7 @@ export class SimpleFlight {
     // Convención: x=pitch, y=yaw, z=roll (todos en body frame)
     const dRot = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(
-        this.angVel.x  * dt,
+        -this.angVel.x * dt,
         -this.angVel.y * dt,
         -this.angVel.z * dt,
         'YXZ'

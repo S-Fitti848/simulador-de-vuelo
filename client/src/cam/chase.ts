@@ -2,10 +2,11 @@ import * as THREE from 'three';
 
 export class ChaseCamera {
   private camera: THREE.PerspectiveCamera;
-  private camPos   = new THREE.Vector3();
-  private camVel   = new THREE.Vector3();
-  private mouseOff = new THREE.Vector2();
-  private isCockpit = false;
+  private camPos      = new THREE.Vector3();
+  private camVel      = new THREE.Vector3();
+  private mouseOff    = new THREE.Vector2();
+  private isCockpit   = false;
+  private initialized = false;
 
   // Tercera persona: suficientemente lejos para ver el modelo completo
   private readonly CAM_BACK    = 22;   // m detrás del avión
@@ -52,11 +53,17 @@ export class ChaseCamera {
         new THREE.Vector3(0, 0, this.LOOK_AHEAD).applyQuaternion(aircraft.quaternion)
       );
 
-      const delta = desiredPos.clone().sub(this.camPos);
-      const accel = delta.clone().multiplyScalar(this.SPRING_K)
-        .sub(this.camVel.clone().multiplyScalar(this.DAMPING));
-      this.camVel.addScaledVector(accel, dt);
-      this.camPos.addScaledVector(this.camVel, dt);
+      if (!this.initialized) {
+        this.camPos.copy(desiredPos);
+        this.camVel.set(0, 0, 0);
+        this.initialized = true;
+      } else {
+        const delta = desiredPos.clone().sub(this.camPos);
+        const accel = delta.clone().multiplyScalar(this.SPRING_K)
+          .sub(this.camVel.clone().multiplyScalar(this.DAMPING));
+        this.camVel.addScaledVector(accel, dt);
+        this.camPos.addScaledVector(this.camVel, dt);
+      }
     }
 
     // Ajuste por mouse (clic derecho): desplazar el punto de mira
