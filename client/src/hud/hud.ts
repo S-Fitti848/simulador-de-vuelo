@@ -1,53 +1,198 @@
 import * as THREE from 'three';
 
+/**
+ * HUD del simulador de vuelo.
+ * Muestra: velocidad, altitud, rumbo, throttle, estado y un horizonte artificial.
+ */
 export class HUD {
-  private element: HTMLDivElement;
+  private panel:      HTMLDivElement;
+  private canvas:     HTMLCanvasElement;
+  private ctx:        CanvasRenderingContext2D;
+  private keyHints:   HTMLDivElement;
 
   constructor() {
-    this.element = document.createElement('div');
-    this.element.style.position = 'absolute';
-    this.element.style.top = '10px';
-    this.element.style.right = '10px';
-    this.element.style.color = '#00ff88';
-    this.element.style.background = 'rgba(0,0,0,0.55)';
-    this.element.style.padding = '8px 12px';
-    this.element.style.fontFamily = 'monospace';
-    this.element.style.fontSize = '14px';
-    this.element.style.lineHeight = '1.7';
-    this.element.style.borderRadius = '4px';
-    this.element.style.whiteSpace = 'pre';
-    document.body.appendChild(this.element);
+    // ── Panel de datos (arriba a la derecha) ─────────────────────────────────
+    this.panel = document.createElement('div');
+    Object.assign(this.panel.style, {
+      position:   'absolute',
+      top:        '12px',
+      right:      '12px',
+      color:      '#00ff88',
+      background: 'rgba(0,0,0,0.55)',
+      padding:    '8px 14px',
+      fontFamily: 'monospace',
+      fontSize:   '14px',
+      lineHeight: '1.75',
+      borderRadius: '5px',
+      whiteSpace:   'pre',
+      zIndex:       '10',
+    });
+    document.body.appendChild(this.panel);
+
+    // ── Horizonte artificial (abajo al centro) ────────────────────────────────
+    this.canvas = document.createElement('canvas');
+    this.canvas.width  = 140;
+    this.canvas.height = 140;
+    Object.assign(this.canvas.style, {
+      position:  'absolute',
+      bottom:    '20px',
+      left:      '50%',
+      transform: 'translateX(-50%)',
+      borderRadius: '50%',
+      border:    '2px solid rgba(255,255,255,0.4)',
+      zIndex:    '10',
+    });
+    document.body.appendChild(this.canvas);
+    this.ctx = this.canvas.getContext('2d')!;
+
+    // ── Ayuda de controles (abajo a la izquierda) ─────────────────────────────
+    this.keyHints = document.createElement('div');
+    Object.assign(this.keyHints.style, {
+      position:   'absolute',
+      bottom:     '12px',
+      left:       '12px',
+      color:      'rgba(255,255,255,0.6)',
+      background: 'rgba(0,0,0,0.45)',
+      padding:    '6px 10px',
+      fontFamily: 'monospace',
+      fontSize:   '11px',
+      lineHeight: '1.6',
+      borderRadius: '4px',
+      whiteSpace:   'pre',
+      zIndex:       '10',
+    });
+    this.keyHints.innerText =
+      'W/S   → cabeceo\n' +
+      'A/D   → guiñada\n' +
+      '←/→   → alabeo\n' +
+      'Shift/Ctrl → motor\n' +
+      'V → cámara  P → avión\n' +
+      'R → respawn  Esp → misil';
+    document.body.appendChild(this.keyHints);
   }
 
   update(
     flight: {
-      throttle: number;
-      velocity: THREE.Vector3;
-      position: THREE.Vector3;
+      throttle:   number;
+      velocity:   THREE.Vector3;
+      position:   THREE.Vector3;
       quaternion: THREE.Quaternion;
-      speed: number;
+      speed:      number;
+      isStall:    boolean;
+      aoa:        number;
     },
     mode: string
   ) {
-    const speedKt = flight.velocity.length() * 1.94384; // m/s → nudos
-    const altM = flight.position.y;
+    const speedKt  = flight.velocity.length() * 1.94384;
+    const altM     = flight.position.y;
 
-    // Rumbo: proyectar el vector forward al plano XZ
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(flight.quaternion);
-    const headingRad = Math.atan2(forward.x, forward.z);
-    const headingDeg = ((headingRad * 180 / Math.PI) + 360) % 360;
+    // Rumbo a partir de la dirección forward del avión
+    const forward    = new THREE.Vector3(0, 0, 1).applyQuaternion(flight.quaternion);
+    const headingDeg = ((Math.atan2(forward.x, forward.z) * 180 / Math.PI) + 360) % 360;
 
-    // Estado del avión
-    let state = 'Normal';
-    if (flight.speed < 60) state = '⚠ Stall';
-    else if (altM < 5) state = 'Aterrizando';
+    // Factor de carga (g) = sustentación / peso
+    const gForce     = flight.velocity.length() > 5
+      ? Math.abs(1 + new THREE.Vector3(0,1,0).applyQuaternion(flight.quaternion).dot(
+          new THREE.Vector3(0, 9.81, 0).normalize()
+        ))
+      : 1;
 
-    this.element.innerText =
-      `Vel:    ${speedKt.toFixed(0)} kt\n` +
-      `Alt:    ${altM.toFixed(0)} m\n` +
-      `Rumbo:  ${headingDeg.toFixed(0)}°\n` +
-      `Throt:  ${(flight.throttle * 100).toFixed(0)}%\n` +
-      `Estado: ${state}\n` +
+    const stateStr = flight.isStall ? '⚠ STALL' : altM < 5 ? 'Aterrizando' : 'Normal';
+    const aoaDeg   = (flight.aoa * 180 / Math.PI).toFixed(1);
+
+    this.panel.innerText =
+      `Vel:    ${speedKt.toFixed(0).padStart(4)} kt\n` +
+      `Alt:    ${altM.toFixed(0).padStart(4)} m\n` +
+      `Rumbo:  ${headingDeg.toFixed(0).padStart(3)}°\n` +
+      `Throt:  ${(flight.throttle * 100).toFixed(0).padStart(3)}%\n` +
+      `AoA:    ${aoaDeg.padStart(5)}°\n` +
+      `Estado: ${stateStr}\n` +
       `Modo:   ${mode}`;
+
+    // ── Dibujar horizonte artificial ──────────────────────────────────────────
+    this.drawArtificialHorizon(flight.quaternion);
+  }
+
+  private drawArtificialHorizon(q: THREE.Quaternion) {
+    const euler = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+    const pitch = euler.x;  // radianes: positivo = nariz arriba
+    const roll  = euler.z;  // radianes: positivo = alabeo derecha
+
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const cx = W / 2;
+    const cy = H / 2;
+    const r  = W / 2 - 2;
+
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, W, H);
+
+    // Recorte circular
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Rotar según el alabeo
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-roll);
+    ctx.translate(-cx, -cy);
+
+    // Pitch → desplazamiento vertical (1° ≈ 2px)
+    const pitchPx = pitch * (180 / Math.PI) * 2;
+
+    // Mitad inferior = tierra (marrón)
+    ctx.fillStyle = '#7a5c2e';
+    ctx.fillRect(0, 0, W, H);
+
+    // Mitad superior = cielo (azul)
+    ctx.fillStyle = '#3a7fc1';
+    ctx.fillRect(0, 0, W, cy + pitchPx);
+
+    // Línea de horizonte
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth   = 2;
+    ctx.beginPath();
+    ctx.moveTo(0,  cy + pitchPx);
+    ctx.lineTo(W,  cy + pitchPx);
+    ctx.stroke();
+
+    // Escalas de pitch (cada 10°)
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth   = 1;
+    ctx.fillStyle   = 'white';
+    ctx.font        = '9px monospace';
+    ctx.textAlign   = 'center';
+    for (let deg = -30; deg <= 30; deg += 10) {
+      if (deg === 0) continue;
+      const y = cy + pitchPx - deg * 2;
+      const w = deg % 20 === 0 ? 28 : 16;
+      ctx.beginPath();
+      ctx.moveTo(cx - w, y);
+      ctx.lineTo(cx + w, y);
+      ctx.stroke();
+      if (deg % 20 === 0) ctx.fillText(String(deg), cx + w + 10, y + 3);
+    }
+
+    ctx.restore(); // fin rotación
+
+    // Símbolo del avión (fijo, no rota)
+    ctx.strokeStyle = '#ffdd00';
+    ctx.lineWidth   = 2.5;
+    // Alas
+    ctx.beginPath();
+    ctx.moveTo(cx - 28, cy);
+    ctx.lineTo(cx - 10, cy);
+    ctx.moveTo(cx + 10, cy);
+    ctx.lineTo(cx + 28, cy);
+    ctx.stroke();
+    // Punto central
+    ctx.fillStyle = '#ffdd00';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore(); // fin clip
   }
 }
