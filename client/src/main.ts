@@ -65,6 +65,7 @@ export class FlightSim {
   private wasPlaneToggle = false;
   private wasViewToggle  = false;
   private wasFire        = false;
+  private lastFireMs     = 0;
 
   private missiles: { obj: THREE.Mesh; vel: THREE.Vector3; ttl: number }[] = [];
   private engineCtx: AudioContext | null = null;
@@ -364,12 +365,14 @@ export class FlightSim {
       this.wasViewToggle = inputs.viewToggle;
 
       // Disparar misil (Espacio)
-      if (inputs.fire && !this.wasFire) {
+      if (inputs.fire && !this.wasFire && time - this.lastFireMs > 350) {
+        this.lastFireMs = time;
+        const fwdDir = new THREE.Vector3(0, 0, 1).applyQuaternion(state.quaternion);
         const missile = new THREE.Mesh(
           new THREE.SphereGeometry(0.4),
           new THREE.MeshBasicMaterial({ color: 0xff4400 })
         );
-        missile.position.copy(state.position);
+        missile.position.copy(state.position).addScaledVector(fwdDir, 8);
         const vel = new THREE.Vector3(0, 0, 600)
           .applyQuaternion(state.quaternion)
           .add(state.velocity);
