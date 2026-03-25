@@ -46,6 +46,17 @@ export class SimpleFlight {
     this.hp = 100;
   }
 
+  /** Teletransporta el avión a una posición/orientación arbitraria (para spawns multiplayer) */
+  teleport(
+    pos:  { x: number; y: number; z: number },
+    quat: { x: number; y: number; z: number; w: number }
+  ) {
+    this.position.set(pos.x, pos.y, pos.z);
+    this.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+    this.velocity.set(0, 0, 150);
+    this.angVel.set(0, 0, 0);
+  }
+
   update(inputs: { pitch: number; roll: number; yaw: number; throttle: number }, dt: number) {
 
     // ── 1. Throttle ──────────────────────────────────────────────────────────

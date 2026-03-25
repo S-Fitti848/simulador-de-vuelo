@@ -5,10 +5,12 @@ import * as THREE from 'three';
  * Muestra: velocidad, altitud, rumbo, throttle, estado y un horizonte artificial.
  */
 export class HUD {
-  private panel:      HTMLDivElement;
-  private canvas:     HTMLCanvasElement;
-  private ctx:        CanvasRenderingContext2D;
-  private keyHints:   HTMLDivElement;
+  private panel:       HTMLDivElement;
+  private canvas:      HTMLCanvasElement;
+  private ctx:         CanvasRenderingContext2D;
+  private keyHints:    HTMLDivElement;
+  private radarCanvas: HTMLCanvasElement;
+  private radarCtx:    CanvasRenderingContext2D;
 
   constructor() {
     // ── Panel de datos (arriba a la derecha) ─────────────────────────────────
@@ -44,6 +46,22 @@ export class HUD {
     });
     document.body.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
+
+    // ── Mini-radar (abajo a la derecha) ───────────────────────────────────────
+    this.radarCanvas = document.createElement('canvas');
+    this.radarCanvas.width  = 120;
+    this.radarCanvas.height = 120;
+    Object.assign(this.radarCanvas.style, {
+      position:  'absolute',
+      bottom:    '20px',
+      right:     '12px',
+      borderRadius: '50%',
+      border:    '2px solid rgba(0,255,136,0.5)',
+      zIndex:    '10',
+      display:   'none',
+    });
+    document.body.appendChild(this.radarCanvas);
+    this.radarCtx = this.radarCanvas.getContext('2d')!;
 
     // ── Ayuda de controles (abajo a la izquierda) ─────────────────────────────
     this.keyHints = document.createElement('div');
@@ -81,7 +99,9 @@ export class HUD {
       isStall:    boolean;
       aoa:        number;
     },
-    mode: string
+    mode: string,
+    hp?: number,
+    radarData?: { myTeam: string; others: { pos: THREE.Vector3; team: string }[] }
   ) {
     const speedKt  = flight.velocity.length() * 1.94384;
     const altM     = flight.position.y;
@@ -100,14 +120,23 @@ export class HUD {
     const stateStr = flight.isStall ? '⚠ STALL' : altM < 5 ? 'Aterrizando' : 'Normal';
     const aoaDeg   = (flight.aoa * 180 / Math.PI).toFixed(1);
 
+    const hpLine = hp !== undefined ? `HP:     ${String(hp).padStart(3)}\n` : '';
+
     this.panel.innerText =
       `Vel:    ${speedKt.toFixed(0).padStart(4)} kt\n` +
       `Alt:    ${altM.toFixed(0).padStart(4)} m\n` +
       `Rumbo:  ${headingDeg.toFixed(0).padStart(3)}°\n` +
       `Throt:  ${(flight.throttle * 100).toFixed(0).padStart(3)}%\n` +
       `AoA:    ${aoaDeg.padStart(5)}°\n` +
+      hpLine +
       `Estado: ${stateStr}\n` +
       `Modo:   ${mode}`;
+
+    // ── Radar (sólo en modo multijugador) ─────────────────────────────────────
+    if (radarData) {
+      this.radarCanvas.style.display = 'block';
+      this.drawRadar(flight.position, radarData.myTeam, radarData.others);
+    }
 
     // ── Dibujar horizonte artificial ──────────────────────────────────────────
     this.drawArtificialHorizon(flight.quaternion);
@@ -194,5 +223,82 @@ export class HUD {
     ctx.fill();
 
     ctx.restore(); // fin clip
+  }
+
+  private drawRadar(
+    myPos:  THREE.Vector3,
+    myTeam: string,
+    others: { pos: THREE.Vector3; team: string }[]
+  ) {
+    const W  = this.radarCanvas.width;
+    const H  = this.radarCanvas.height;
+    const cx = W / 2;
+    const cy = H / 2;
+    const r  = W / 2 - 2;
+    const RANGE = 5000; // metros que caben en el radio del radar
+
+    const rc = this.radarCtx;
+    rc.clearRect(0, 0, W, H);
+
+    // Fondo circular semitransparente
+    rc.save();
+    rc.beginPath();
+    rc.arc(cx, cy, r, 0, Math.PI * 2);
+    rc.clip();
+
+    rc.fillStyle = 'rgba(0,0,0,0.65)';
+    rc.fillRect(0, 0, W, H);
+
+    // Anillo de referencia a mitad de rango
+    rc.strokeStyle = 'rgba(0,255,136,0.2)';
+    rc.lineWidth   = 1;
+    rc.beginPath();
+    rc.arc(cx, cy, r / 2, 0, Math.PI * 2);
+    rc.stroke();
+
+    // Cruz central
+    rc.strokeStyle = 'rgba(0,255,136,0.15)';
+    rc.beginPath();
+    rc.moveTo(cx, cy - r); rc.lineTo(cx, cy + r);
+    rc.moveTo(cx - r, cy); rc.lineTo(cx + r, cy);
+    rc.stroke();
+
+    // Puntos de otros jugadores
+    const DOT_COLORS: Record<string, string> = {
+      A:    '#4488ff',
+      B:    '#ff4444',
+      none: '#ffcc00',
+    };
+
+    for (const o of others) {
+      const dx = o.pos.x - myPos.x;
+      const dz = o.pos.z - myPos.z;
+      const px = cx + (dx / RANGE) * r;
+      const py = cy + (dz / RANGE) * r;
+
+      // Solo dibujar si está dentro del círculo
+      if ((px - cx) ** 2 + (py - cy) ** 2 > r * r) continue;
+
+      const col = DOT_COLORS[o.team] ?? '#ffcc00';
+      rc.fillStyle = col;
+      rc.beginPath();
+      rc.arc(px, py, 4, 0, Math.PI * 2);
+      rc.fill();
+    }
+
+    // Mi punto (centro, blanco)
+    rc.fillStyle = '#ffffff';
+    rc.beginPath();
+    rc.arc(cx, cy, 4, 0, Math.PI * 2);
+    rc.fill();
+
+    rc.restore();
+
+    // Borde exterior
+    rc.strokeStyle = 'rgba(0,255,136,0.5)';
+    rc.lineWidth   = 1.5;
+    rc.beginPath();
+    rc.arc(cx, cy, r, 0, Math.PI * 2);
+    rc.stroke();
   }
 }
