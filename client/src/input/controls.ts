@@ -1,10 +1,7 @@
-import * as THREE from 'three';
-
 export class Controls {
   private canvas: HTMLCanvasElement;
   private keys: { [key: string]: boolean } = {};
   private mouse: { x: number; y: number; down: boolean } = { x: 0, y: 0, down: false };
-  private inputs = { pitch: 0, roll: 0, yaw: 0, throttle: 0, fire: false, respawn: false, pause: false };
   private pointerLocked = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -22,7 +19,7 @@ export class Controls {
     hint.style.color = 'white';
     hint.style.background = 'rgba(0,0,0,0.5)';
     hint.style.padding = '5px';
-    hint.innerText = 'Click canvas to focus';
+    hint.innerText = 'Click para enfocar | Clic derecho para cámara libre';
     document.body.appendChild(hint);
     this.canvas.addEventListener('focus', () => hint.remove());
   }
@@ -62,21 +59,22 @@ export class Controls {
   }
 
   update() {
-    this.inputs.pitch = (this.keys['KeyW'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0);
-    this.inputs.roll = (this.keys['KeyD'] ? 1 : 0) - (this.keys['KeyA'] ? 1 : 0);
-    this.inputs.yaw = (this.keys['KeyE'] ? 1 : 0) - (this.keys['KeyQ'] ? 1 : 0);
-    this.inputs.throttle = (this.keys['ShiftLeft'] ? 1 : 0) - (this.keys['ControlLeft'] ? 1 : 0);
-    this.inputs.fire = this.keys['Space'];
-    this.inputs.respawn = this.keys['KeyR'];
-    this.inputs.pause = this.keys['Escape'];
     return {
-      pitch: this.inputs.pitch,
-      roll: this.inputs.roll,
-      yaw: this.inputs.yaw,
-      throttle: this.inputs.throttle,
-      fire: this.inputs.fire,
-      respawn: this.inputs.respawn,
-      pause: this.inputs.pause,
+      // W/S → pitch (subir / bajar morro)
+      pitch: (this.keys['KeyW'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0),
+      // A/D → yaw (girar izquierda / derecha)
+      yaw: (this.keys['KeyA'] ? 1 : 0) - (this.keys['KeyD'] ? 1 : 0),
+      // Flechas izq/der → roll (inclinación lateral)
+      roll: (this.keys['ArrowRight'] ? 1 : 0) - (this.keys['ArrowLeft'] ? 1 : 0),
+      // Shift / Ctrl → throttle
+      throttle: (this.keys['ShiftLeft'] || this.keys['ShiftRight'] ? 1 : 0) -
+                (this.keys['ControlLeft'] || this.keys['ControlRight'] ? 1 : 0),
+      fire: !!this.keys['Space'],
+      respawn: !!this.keys['KeyR'],
+      pause: !!this.keys['Escape'],
+      // P → cambiar avión, V → cambiar vista cámara
+      planeToggle: !!this.keys['KeyP'],
+      viewToggle: !!this.keys['KeyV'],
       mouseX: this.mouse.down ? this.mouse.x : 0,
       mouseY: this.mouse.down ? this.mouse.y : 0,
     };

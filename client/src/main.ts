@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { Controls } from './input/controls';
@@ -8,6 +7,7 @@ import { SpawnManager } from './game/spawn';
 import { ModeManager } from './mode/mode';
 import { HUD } from './hud/hud';
 import { BootOverlay } from './boot/boot';
+import { showLanding, LandingResult } from './ui/landing';
 
 export class FlightSim {
   private renderer: THREE.WebGLRenderer;
@@ -26,15 +26,17 @@ export class FlightSim {
   private aircraft: THREE.Group = new THREE.Group();
   private f22Model: THREE.Group | null = null;
   private su57Model: THREE.Group | null = null;
-  private currentPlane = 'f22';
+  private currentPlane: 'f22' | 'su57';
   private wasPlaneToggle = false;
   private wasViewToggle = false;
   private missiles: { obj: THREE.Mesh; vel: THREE.Vector3; time: number }[] = [];
   private engineSound: AudioContext | null = null;
-  private fireSound: AudioContext | null = null;
   private wasFire = false;
 
-  constructor() {
+  constructor(landingResult?: LandingResult) {
+    // Determinar avión inicial según selección del usuario
+    this.currentPlane = landingResult?.aircraft === 'dragon' ? 'su57' : 'f22';
+
     this.boot = new BootOverlay();
     this.boot.log('Initializing renderer...');
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -48,6 +50,12 @@ export class FlightSim {
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
 
     this.boot.log('Setting up ground and sky...');
+    // Cielo azul claro
+    this.scene.background = new THREE.Color(0x87CEEB);
+    // Niebla para dar sensación de distancia y horizonte
+    this.scene.fog = new THREE.Fog(0x87CEEB, 2000, 9000);
+
+    // Terreno verde con relieve procedural
     const groundGeo = new THREE.PlaneGeometry(100000, 100000, 200, 200);
     const pos = groundGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
@@ -59,16 +67,15 @@ export class FlightSim {
     groundGeo.computeVertexNormals();
     const ground = new THREE.Mesh(
       groundGeo,
-      new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 1 })
+      new THREE.MeshStandardMaterial({ color: 0x4a8c3f, roughness: 1 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
-    this.scene.background = new THREE.Color(0x87CEEB);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    const directionalLight = new THREE.DirectionalLight(0xfffbe0, 1.2);
     directionalLight.position.set(100, 200, 100);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
@@ -94,8 +101,9 @@ export class FlightSim {
     const loader = new GLTFLoader();
     loader.load('/models/f22.glb', (gltf) => {
       this.f22Model = gltf.scene;
-      this.f22Model.scale.set(1, 1, 1); // Adjusted for smaller models; change to 0.05 if using original big ones
+      this.f22Model.scale.set(1, 1, 1);
       this.f22Model.rotation.y = Math.PI;
+      this.f22Model.visible = this.currentPlane === 'f22';
       this.f22Model.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           child.castShadow = true;
@@ -105,9 +113,11 @@ export class FlightSim {
       this.aircraft.add(this.f22Model);
       this.boot.log('F-22 model loaded');
     }, undefined, (error) => {
-      this.boot.handleError(`F-22 load error: ${error.message}`); // Show specific error in overlay
-      // Placeholder if failed
-      const placeholder = new THREE.Mesh(new THREE.BoxGeometry(5, 2, 10), new THREE.MeshStandardMaterial({ color: 0x0000ff }));
+      this.boot.handleError(`F-22 load error: ${(error as Error).message}`);
+      const placeholder = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 2, 10),
+        new THREE.MeshStandardMaterial({ color: 0x0000ff })
+      );
       placeholder.rotation.y = Math.PI;
       this.aircraft.add(placeholder);
       this.boot.log('Using placeholder plane (F-22 failed)');
@@ -115,9 +125,9 @@ export class FlightSim {
 
     loader.load('/models/su57.glb', (gltf) => {
       this.su57Model = gltf.scene;
-      this.su57Model.scale.set(1, 1, 1); // Adjusted for smaller models
+      this.su57Model.scale.set(1, 1, 1);
       this.su57Model.rotation.y = Math.PI;
-      this.su57Model.visible = false;
+      this.su57Model.visible = this.currentPlane === 'su57';
       this.su57Model.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           child.castShadow = true;
@@ -127,12 +137,12 @@ export class FlightSim {
       this.aircraft.add(this.su57Model);
       this.boot.log('SU-57 model loaded');
     }, undefined, (error) => {
-      this.boot.handleError(`SU-57 load error: ${error.message}`);
+      this.boot.handleError(`SU-57 load error: ${(error as Error).message}`);
       this.boot.log('SU-57 failed, sticking with F-22 or placeholder');
     });
 
-    // Sounds
-    if (AudioContext) {
+    // Motor: sonido sintético de fondo
+    if (typeof AudioContext !== 'undefined') {
       this.engineSound = new AudioContext();
       const oscillator = this.engineSound.createOscillator();
       oscillator.type = 'sawtooth';
@@ -156,36 +166,45 @@ export class FlightSim {
 
     while (this.accumulator >= this.h) {
       const inputs = this.controls.update();
-      this.spawn.update(inputs, this.h, this.flight.position);
+      this.spawn.update(inputs);
       const flightState = this.flight.update(inputs, this.h);
       this.chaseCamera.update(flightState, { x: inputs.mouseX, y: inputs.mouseY }, this.h);
       this.hud.update(flightState, this.mode.getMode());
 
+      // Toggle de avión (tecla P)
       if (inputs.planeToggle && !this.wasPlaneToggle) {
         if (this.currentPlane === 'f22' && this.su57Model) {
           if (this.f22Model) this.f22Model.visible = false;
           this.su57Model.visible = true;
           this.currentPlane = 'su57';
         } else if (this.f22Model) {
-          this.su57Model.visible = false;
+          if (this.su57Model) this.su57Model.visible = false;
           this.f22Model.visible = true;
           this.currentPlane = 'f22';
         }
       }
       this.wasPlaneToggle = inputs.planeToggle;
 
+      // Toggle de vista cámara (tecla V)
       if (inputs.viewToggle && !this.wasViewToggle) {
         this.chaseCamera.toggleView();
       }
       this.wasViewToggle = inputs.viewToggle;
 
+      // Disparar misil (Espacio)
       if (inputs.fire && !this.wasFire) {
-        const missile = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        const missile = new THREE.Mesh(
+          new THREE.SphereGeometry(0.5),
+          new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
         missile.position.copy(flightState.position);
-        const vel = new THREE.Vector3(0, 0, 500).applyQuaternion(flightState.quaternion).add(flightState.velocity);
+        const vel = new THREE.Vector3(0, 0, 500)
+          .applyQuaternion(flightState.quaternion)
+          .add(flightState.velocity);
         this.scene.add(missile);
         this.missiles.push({ obj: missile, vel, time: 5 });
-        if (AudioContext) {
+
+        if (typeof AudioContext !== 'undefined') {
           const ctx = new AudioContext();
           const osc = ctx.createOscillator();
           osc.type = 'square';
@@ -223,4 +242,7 @@ export class FlightSim {
   }
 }
 
-new FlightSim();
+// Mostrar pantalla de inicio antes de iniciar el simulador
+showLanding((result) => {
+  new FlightSim(result);
+});
