@@ -2,150 +2,107 @@ import express from 'express';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import 'dotenv/config';
-import { RoomManager } from './net/rooms.js';
+import { LobbyManager } from './net/lobby.js';
+import { GameManager }  from './game.js';
 
-const app = express();
-
+const app     = express();
 const allowed = (process.env.ALLOWED_ORIGINS || '')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+  .split(',').map(o => o.trim()).filter(Boolean);
 
-app.use(
-  cors(
-    allowed.length
-      ? { origin: allowed, credentials: true }
-      : { origin: true, credentials: true }
-  )
+app.use(cors(allowed.length
+  ? { origin: allowed, credentials: true }
+  : { origin: true,   credentials: true }
+));
+
+app.get('/health', (_, res) => res.json({ ok: true }));
+app.get('/status', (_, res) => res.json({
+  players: players.size,
+  lobby:   lobbyManager.state(),
+}));
+
+const port   = process.env.PORT || 3000;
+const server = app.listen(port, '0.0.0.0', () =>
+  console.log(`[Server] escuchando en :${port}`)
 );
-
-app.get('/health', (_req, res) => {
-  res.json({ ok: true });
-});
-
-const rooms = new RoomManager();
-const players = new Map(); // ws -> player
-
-app.get('/status', (_req, res) => {
-  res.json({
-    onlineCount: players.size,
-    rooms: rooms.listRooms().map((r) => ({
-      id: r.id,
-      name: r.name,
-      status: r.status,
-      count: r.players.length,
-      max: r.max,
-    })),
-  });
-});
-
-const port = process.env.PORT || 3000;
-const host = '0.0.0.0';
-const server = app.listen(port, host, () => {
-  console.log(`Server listening on http://${host}:${port}`);
-});
 
 const wss = new WebSocketServer({ server });
 
-function broadcast(data, filter) {
-  const str = JSON.stringify(data);
-  wss.clients.forEach((c) => {
-    if (c.readyState === c.OPEN && (!filter || filter(c))) {
-      c.send(str);
+// registry de jugadores: ws → { id, username, aircraft }
+const players = new Map();
+
+function send(ws, data) {
+  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(data));
+}
+
+// ── Instanciar managers ────────────────────────────────────────────────────────
+
+const gameManager = new GameManager(send);
+
+const lobbyManager = new LobbyManager((roomType, roomPlayers) => {
+  gameManager.createRoom(roomType, roomPlayers);
+  // Actualizar lobby a todos los que no están en partida
+  broadcastLobby();
+});
+
+// ── Broadcast helpers ──────────────────────────────────────────────────────────
+
+function broadcastLobby() {
+  const state = lobbyManager.state();
+  for (const [ws] of players) {
+    if (!gameManager.isInGame(ws)) {
+      send(ws, { type: 'lobby_update', ...state });
     }
-  });
+  }
 }
 
-function broadcastPresence() {
-  broadcast({ type: 'presence', onlineCount: players.size });
-}
+// ── WebSocket ──────────────────────────────────────────────────────────────────
 
-function broadcastRooms() {
-  broadcast({ type: 'rooms', list: rooms.listRooms() });
-}
+wss.on('connection', ws => {
+  const id = Math.random().toString(36).slice(2, 10);
+  players.set(ws, { id, username: 'Pilot', aircraft: 'f22' });
 
-function broadcastRoom(roomId, data) {
-  broadcast(data, (c) => players.get(c)?.roomId === roomId);
-}
+  send(ws, { type: 'welcome', playerId: id, lobbyState: lobbyManager.state() });
 
-wss.on('connection', (ws) => {
-  const id = Math.random().toString(36).slice(2);
-  players.set(ws, { id, username: '', roomId: null, ready: false });
-  ws.send(
-    JSON.stringify({ type: 'hello', id, serverTime: Date.now() })
-  );
-  broadcastPresence();
-  broadcastRooms();
-
-  ws.on('message', (raw) => {
+  ws.on('message', raw => {
     let msg;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
+    try { msg = JSON.parse(raw); } catch { return; }
     const player = players.get(ws);
     if (!player) return;
+
     switch (msg.type) {
+
       case 'ping':
-        ws.send(JSON.stringify({ type: 'pong', id: msg.id, time: msg.time }));
+        send(ws, { type: 'pong', t: msg.t });
         break;
-      case 'join':
-        player.username = msg.username || '';
-        player.aircraft = msg.aircraft || '';
+
+      case 'hello':
+        player.username = (msg.username || 'Pilot').slice(0, 20);
+        player.aircraft = msg.aircraft || 'f22';
+        broadcastLobby();
         break;
-      case 'createRoom': {
-        const room = rooms.createRoom(msg.name, player.id);
-        rooms.joinRoom(room.id, {
-          id: player.id,
-          username: player.username,
-          aircraft: player.aircraft,
-          ready: false,
+
+      case 'join_queue':
+        if (gameManager.isInGame(ws)) break;
+        lobbyManager.join(ws, player.id, player.username, player.aircraft, msg.roomType);
+        send(ws, {
+          type: 'queue_joined',
+          roomType: msg.roomType,
+          ...lobbyManager.state(),
         });
-        player.roomId = room.id;
-        ws.send(JSON.stringify({ type: 'roomCreated', room }));
-        broadcastRooms();
+        broadcastLobby();
         break;
-      }
-      case 'joinRoom': {
-        const room = rooms.joinRoom(msg.id, {
-          id: player.id,
-          username: player.username,
-          aircraft: player.aircraft,
-          ready: false,
-        });
-        if (room) {
-          player.roomId = room.id;
-          ws.send(JSON.stringify({ type: 'joined', room }));
-          broadcastRooms();
-        }
+
+      case 'leave_queue':
+        lobbyManager.leave(player.id);
+        broadcastLobby();
         break;
-      }
-      case 'leaveRoom':
-        rooms.leaveRoom(player.id);
-        player.roomId = null;
-        player.ready = false;
-        broadcastRooms();
+
+      case 'player_state':
+        gameManager.handleState(ws, msg);
         break;
-      case 'setReady':
-        if (player.roomId) {
-          rooms.setReady(player.roomId, player.id, !!msg.ready);
-          player.ready = !!msg.ready;
-          broadcastRooms();
-        }
-        break;
-      case 'startMatch':
-        if (player.roomId) {
-          const room = rooms.startMatch(player.roomId);
-          if (room) {
-            broadcastRoom(room.id, {
-              type: 'matchStart',
-              roomId: room.id,
-              startTime: Date.now(),
-            });
-            broadcastRooms();
-          }
-        }
+
+      case 'missile_fired':
+        gameManager.handleMissile(ws, msg);
         break;
     }
   });
@@ -153,15 +110,13 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     const player = players.get(ws);
     if (player) {
-      rooms.leaveRoom(player.id);
+      lobbyManager.leave(player.id);
+      gameManager.handleLeave(ws);
       players.delete(ws);
-      broadcastPresence();
-      broadcastRooms();
+      broadcastLobby();
     }
   });
 });
 
-setInterval(() => {
-  broadcastPresence();
-  broadcastRooms();
-}, 3000);
+// Refrescar lobby cada 5s para clientes inactivos
+setInterval(broadcastLobby, 5000);
