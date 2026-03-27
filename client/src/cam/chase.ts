@@ -27,7 +27,7 @@ export class ChaseCamera {
   }
 
   update(
-    aircraft: { position: THREE.Vector3; quaternion: THREE.Quaternion },
+    aircraft: { position: THREE.Vector3; quaternion: THREE.Quaternion; velocity: THREE.Vector3 },
     mouse:    { x: number; y: number },
     dt:       number,
     speed     = 150
@@ -35,24 +35,29 @@ export class ChaseCamera {
     let desiredPos: THREE.Vector3;
     let lookTarget: THREE.Vector3;
 
+    // Dirección real de vuelo — independiente de la orientación visual del modelo
+    const vel = aircraft.velocity;
+    const fwdWorld = vel.length() > 5
+      ? vel.clone().normalize()
+      : new THREE.Vector3(0, 0, 1).applyQuaternion(aircraft.quaternion);
+    const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(aircraft.quaternion);
+
     if (this.isCockpit) {
-      // Cabina: la cámara está fija respecto al avión
-      const offset = this.COCKPIT_OFFSET.clone().applyQuaternion(aircraft.quaternion);
-      desiredPos = aircraft.position.clone().add(offset);
-      lookTarget = aircraft.position.clone().add(
-        new THREE.Vector3(0, 0, 50).applyQuaternion(aircraft.quaternion)
-      );
+      // Cabina: posición fija respecto al avión, mirando hacia donde vuela
+      const cockpitOffset = upWorld.clone().multiplyScalar(1.0)
+        .addScaledVector(fwdWorld, 4.5);
+      desiredPos = aircraft.position.clone().add(cockpitOffset);
+      lookTarget = aircraft.position.clone().addScaledVector(fwdWorld, 50);
       // En cabina la cámara sigue instantáneamente (sin resorte)
       this.camPos.copy(desiredPos);
       this.camVel.set(0, 0, 0);
     } else {
-      // Tercera persona: resorte amortiguado para seguimiento suave
-      const offset = new THREE.Vector3(0, this.CAM_UP, -this.CAM_BACK)
-        .applyQuaternion(aircraft.quaternion);
+      // Tercera persona: detrás según dirección real de vuelo (no eje Z del modelo)
+      const backWorld = fwdWorld.clone().negate();
+      const offset = backWorld.clone().multiplyScalar(this.CAM_BACK)
+        .addScaledVector(upWorld, this.CAM_UP);
       desiredPos = aircraft.position.clone().add(offset);
-      lookTarget = aircraft.position.clone().add(
-        new THREE.Vector3(0, 0, this.LOOK_AHEAD).applyQuaternion(aircraft.quaternion)
-      );
+      lookTarget = aircraft.position.clone().addScaledVector(fwdWorld, this.LOOK_AHEAD);
 
       if (!this.initialized) {
         this.camPos.copy(desiredPos);
@@ -73,11 +78,9 @@ export class ChaseCamera {
     if (!mouse.x && !mouse.y) {
       this.mouseOff.lerp(new THREE.Vector2(), 3 * dt);
     }
-    lookTarget.addScaledVector(
-      new THREE.Vector3(this.mouseOff.x * 30, -this.mouseOff.y * 20, 0)
-        .applyQuaternion(aircraft.quaternion),
-      1
-    );
+    const rightWorld = fwdWorld.clone().cross(upWorld).normalize();
+    lookTarget.addScaledVector(rightWorld, this.mouseOff.x * 30);
+    lookTarget.addScaledVector(upWorld, -this.mouseOff.y * 20);
 
     // FOV dinámico: más ancho a mayor velocidad (sensación de aceleración)
     const t = THREE.MathUtils.clamp((speed - 55) / (560 - 55), 0, 1);
