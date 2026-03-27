@@ -81,8 +81,8 @@ export class HUD {
     });
     this.keyHints.innerText =
       'W/S   → cabeceo\n' +
-      'A/D   → guiñada\n' +
-      '←/→   → alabeo\n' +
+      'A/D   → alabeo\n' +
+      'Q/E   → guiñada\n' +
       'Shift/Ctrl → motor\n' +
       'V → cámara  P → avión\n' +
       'R → respawn  Esp → misil';
