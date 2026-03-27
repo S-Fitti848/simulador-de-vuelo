@@ -18,6 +18,43 @@ import { createCloudLayer }   from './effects/clouds';
 const MODEL_F22  = '/models/f-22_raptor_-_fighter_jet_-_free.glb';
 const MODEL_SU57 = '/models/sukhoi_su-57_felon_-_fighter_jet_-_free.glb';
 
+function makeGridTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#4a8c3f';
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = '#2e5a28';
+  ctx.lineWidth = 2;
+  const cells = 8;
+  const step = size / cells;
+  for (let i = 0; i <= cells; i++) {
+    ctx.beginPath(); ctx.moveTo(i * step, 0); ctx.lineTo(i * step, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * step); ctx.lineTo(size, i * step); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(200, 200);
+  return tex;
+}
+
+function addBoundaryMountains(scene: THREE.Scene) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x556655, roughness: 0.9 });
+  const W = 20000;
+  const positions: { x: number; y: number; z: number }[] = [
+    ...Array.from({ length: 10 }, (_, i) => ({ x: (i - 4.5) * 4500, y: 1500, z:  W })),
+    ...Array.from({ length: 10 }, (_, i) => ({ x: (i - 4.5) * 4500, y: 1500, z: -W })),
+    ...Array.from({ length: 10 }, (_, i) => ({ x:  W, y: 1500, z: (i - 4.5) * 4500 })),
+    ...Array.from({ length: 10 }, (_, i) => ({ x: -W, y: 1500, z: (i - 4.5) * 4500 })),
+  ];
+  for (const p of positions) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(800, 3000, 800), mat);
+    m.position.set(p.x, p.y, p.z);
+    scene.add(m);
+  }
+}
+
 function autoScale(model: THREE.Group, targetSize = 14): void {
   const box  = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
@@ -99,7 +136,7 @@ export class FlightSim {
       70, window.innerWidth / window.innerHeight, 0.5, 15000
     );
     this.scene.background = new THREE.Color(0x87CEEB);
-    this.scene.fog = new THREE.Fog(0x87CEEB, 3000, 10000);
+    this.scene.fog = new THREE.Fog(0x87CEEB, 800, 8000);
 
     // ── Terreno procedural ────────────────────────────────────────────────────
     this.boot.log('Generando terreno...');
@@ -116,7 +153,7 @@ export class FlightSim {
     groundGeo.computeVertexNormals();
     const ground = new THREE.Mesh(
       groundGeo,
-      new THREE.MeshStandardMaterial({ color: 0x4a8c3f, roughness: 0.95 })
+      new THREE.MeshStandardMaterial({ map: makeGridTexture(), roughness: 0.95 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
@@ -135,6 +172,9 @@ export class FlightSim {
     sun.shadow.camera.top    = 600;
     sun.shadow.camera.bottom = -600;
     this.scene.add(sun);
+
+    // ── Montes en los bordes (espacio finito) ─────────────────────────────────
+    addBoundaryMountains(this.scene);
 
     // ── Nubes ─────────────────────────────────────────────────────────────────
     createCloudLayer(this.scene);
@@ -333,7 +373,7 @@ export class FlightSim {
       const state = this.flight.update(inputs, this.FIXED_DT);
       this.lastFlightState = state;
 
-      this.chaseCamera.update(state, { x: inputs.mouseX, y: inputs.mouseY }, this.FIXED_DT);
+      this.chaseCamera.update(state, { x: inputs.mouseX, y: inputs.mouseY }, this.FIXED_DT, state.speed);
 
       // Construir datos de radar si hay multiplayer
       const radarData = this.remoteManager ? {

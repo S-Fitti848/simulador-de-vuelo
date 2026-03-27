@@ -12,8 +12,8 @@ export class ChaseCamera {
   private readonly CAM_BACK    = 22;   // m detrás del avión
   private readonly CAM_UP      = 7;    // m sobre el avión
   private readonly LOOK_AHEAD  = 50;   // m adelante del avión para apuntar cámara
-  private readonly SPRING_K    = 25;   // rigidez del resorte
-  private readonly DAMPING     = 10;   // amortiguación
+  private readonly SPRING_K    = 6;    // rigidez del resorte (suelto para dar inercia)
+  private readonly DAMPING     = 4;    // amortiguación
 
   // Vista cabina: justo detrás del tablero
   private readonly COCKPIT_OFFSET = new THREE.Vector3(0, 1.0, 4.5);
@@ -29,7 +29,8 @@ export class ChaseCamera {
   update(
     aircraft: { position: THREE.Vector3; quaternion: THREE.Quaternion },
     mouse:    { x: number; y: number },
-    dt:       number
+    dt:       number,
+    speed     = 150
   ) {
     let desiredPos: THREE.Vector3;
     let lookTarget: THREE.Vector3;
@@ -77,6 +78,12 @@ export class ChaseCamera {
         .applyQuaternion(aircraft.quaternion),
       1
     );
+
+    // FOV dinámico: más ancho a mayor velocidad (sensación de aceleración)
+    const t = THREE.MathUtils.clamp((speed - 55) / (560 - 55), 0, 1);
+    const targetFov = THREE.MathUtils.lerp(65, 95, t);
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 4 * dt);
+    this.camera.updateProjectionMatrix();
 
     this.camera.position.copy(this.camPos);
     this.camera.lookAt(lookTarget);
