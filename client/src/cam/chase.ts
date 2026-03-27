@@ -57,7 +57,9 @@ export class ChaseCamera {
       const offset = backWorld.clone().multiplyScalar(this.CAM_BACK)
         .addScaledVector(upWorld, this.CAM_UP);
       desiredPos = aircraft.position.clone().add(offset);
-      lookTarget = aircraft.position.clone().addScaledVector(fwdWorld, this.LOOK_AHEAD);
+      // Mirar al avión directamente — el lookTarget no rota con el avión,
+      // así la vista sólo cambia cuando la posición de la cámara se mueve.
+      lookTarget = aircraft.position.clone();
 
       if (!this.initialized) {
         this.camPos.copy(desiredPos);
