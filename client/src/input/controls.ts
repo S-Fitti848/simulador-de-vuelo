@@ -60,21 +60,20 @@ export class Controls {
 
   update() {
     return {
-      // W/S → pitch (subir / bajar morro)
+      // W/S → cabeceo (nose up / nose down)
       pitch: (this.keys['KeyW'] ? 1 : 0) - (this.keys['KeyS'] ? 1 : 0),
-      // A/D → yaw (girar izquierda / derecha)
-      yaw: (this.keys['KeyA'] ? 1 : 0) - (this.keys['KeyD'] ? 1 : 0),
-      // Flechas izq/der → roll (inclinación lateral)
-      roll: (this.keys['ArrowRight'] ? 1 : 0) - (this.keys['ArrowLeft'] ? 1 : 0),
+      // A/D → alabeo (roll left / roll right)
+      roll:  (this.keys['KeyA'] ? 1 : 0) - (this.keys['KeyD'] ? 1 : 0),
+      // Q/E → guiñada (yaw left / yaw right)
+      yaw:   (this.keys['KeyQ'] ? 1 : 0) - (this.keys['KeyE'] ? 1 : 0),
       // Shift / Ctrl → throttle
       throttle: (this.keys['ShiftLeft'] || this.keys['ShiftRight'] ? 1 : 0) -
                 (this.keys['ControlLeft'] || this.keys['ControlRight'] ? 1 : 0),
-      fire: !!this.keys['Space'],
-      respawn: !!this.keys['KeyR'],
-      pause: !!this.keys['Escape'],
-      // P → cambiar avión, V → cambiar vista cámara
+      fire:        !!this.keys['Space'],
+      respawn:     !!this.keys['KeyR'],
+      pause:       !!this.keys['Escape'],
       planeToggle: !!this.keys['KeyP'],
-      viewToggle: !!this.keys['KeyV'],
+      viewToggle:  !!this.keys['KeyV'],
       mouseX: this.mouse.down ? this.mouse.x : 0,
       mouseY: this.mouse.down ? this.mouse.y : 0,
     };
