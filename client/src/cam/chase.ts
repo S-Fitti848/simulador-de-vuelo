@@ -40,25 +40,26 @@ export class ChaseCamera {
     const fwdWorld = vel.length() > 5
       ? vel.clone().normalize()
       : new THREE.Vector3(0, 0, 1).applyQuaternion(aircraft.quaternion);
-    const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(aircraft.quaternion);
+
+    // UP siempre en world-space para la cámara de persecución.
+    // Si se usara el "up" local del avión, cuando el avión banquea la cámara
+    // quedaría de costado en lugar de arriba.
+    const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
     if (this.isCockpit) {
-      // Cabina: posición fija respecto al avión, mirando hacia donde vuela
-      const cockpitOffset = upWorld.clone().multiplyScalar(1.0)
-        .addScaledVector(fwdWorld, 4.5);
+      // Cabina: usa el frame local del avión (estás dentro de la cabina)
+      const cockpitOffset = this.COCKPIT_OFFSET.clone().applyQuaternion(aircraft.quaternion);
       desiredPos = aircraft.position.clone().add(cockpitOffset);
       lookTarget = aircraft.position.clone().addScaledVector(fwdWorld, 50);
       // En cabina la cámara sigue instantáneamente (sin resorte)
       this.camPos.copy(desiredPos);
       this.camVel.set(0, 0, 0);
     } else {
-      // Tercera persona: detrás según dirección real de vuelo (no eje Z del modelo)
+      // Tercera persona: atrás en la dirección opuesta al vuelo, arriba en world-up
       const backWorld = fwdWorld.clone().negate();
       const offset = backWorld.clone().multiplyScalar(this.CAM_BACK)
-        .addScaledVector(upWorld, this.CAM_UP);
+        .addScaledVector(WORLD_UP, this.CAM_UP);
       desiredPos = aircraft.position.clone().add(offset);
-      // Mirar al avión directamente — el lookTarget no rota con el avión,
-      // así la vista sólo cambia cuando la posición de la cámara se mueve.
       lookTarget = aircraft.position.clone();
 
       if (!this.initialized) {
@@ -80,9 +81,9 @@ export class ChaseCamera {
     if (!mouse.x && !mouse.y) {
       this.mouseOff.lerp(new THREE.Vector2(), 3 * dt);
     }
-    const rightWorld = fwdWorld.clone().cross(upWorld).normalize();
+    const rightWorld = fwdWorld.clone().cross(WORLD_UP).normalize();
     lookTarget.addScaledVector(rightWorld, this.mouseOff.x * 30);
-    lookTarget.addScaledVector(upWorld, -this.mouseOff.y * 20);
+    lookTarget.addScaledVector(WORLD_UP, -this.mouseOff.y * 20);
 
     // FOV dinámico: más ancho a mayor velocidad (sensación de aceleración)
     const t = THREE.MathUtils.clamp((speed - 55) / (560 - 55), 0, 1);
